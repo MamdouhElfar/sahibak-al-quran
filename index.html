@@ -123,6 +123,28 @@ input[type=number]{width:70px}
 .mtext{font-family:"Amiri Quran",Amiri,serif;font-size:var(--qfs,26px);line-height:2.15;text-align:justify;text-align-last:center;color:var(--ink);min-height:50vh}
 .sura-h{font-family:Amiri,serif;text-align:center;font-size:21px;font-weight:700;color:var(--accent);border:1.5px solid var(--frame);border-radius:6px;padding:2px 0;margin:10px 0 4px;line-height:1.8;background:color-mix(in srgb,var(--frame) 10%,transparent)}
 .basm{text-align:center;text-align-last:center;display:block;margin-bottom:2px}
+/* المصحف كتابًا يُقلَّب */
+#book{display:none}
+#reader.flip #book{display:block;flex:1;min-width:0}
+#reader.flip .mpage{display:none}
+#reader.flip .reader{max-width:calc(var(--qfs,26px) * 44 + 120px);align-items:center}
+#reader.flip .nav{align-self:stretch}
+.fp{background:var(--page);overflow:hidden}
+.fpi{height:100%;display:flex;flex-direction:column;padding:12px 4% 8px;box-sizing:border-box;
+  border:2px solid var(--frame);outline:1px solid var(--frame);outline-offset:-7px}
+.fp .mph{font-size:13px;margin-bottom:4px;padding:0 6px 4px}
+.fp .mtext.qcf{font-size:var(--pfs,24px);flex:1;display:flex;flex-direction:column;justify-content:center;padding:0}
+.fp .mtext.plain{font-size:calc(var(--pfs,24px) * .62);overflow:auto;flex:1;min-height:0}
+.fpn{text-align:center;font-family:Amiri,serif;font-size:14px;color:var(--muted);padding-top:2px}
+.mpage.turn-next{animation:turnNext .45s cubic-bezier(.2,.7,.3,1)}
+.mpage.turn-prev{animation:turnPrev .45s cubic-bezier(.2,.7,.3,1)}
+@keyframes turnNext{from{transform:perspective(1400px) rotateY(-75deg);transform-origin:right center;opacity:.4}
+  to{transform:perspective(1400px) rotateY(0);transform-origin:right center;opacity:1}}
+@keyframes turnPrev{from{transform:perspective(1400px) rotateY(75deg);transform-origin:left center;opacity:.4}
+  to{transform:perspective(1400px) rotateY(0);transform-origin:left center;opacity:1}}
+@media (prefers-reduced-motion:reduce){.mpage.turn-next,.mpage.turn-prev{animation:none}}
+.rstat{max-width:720px;margin:-18px auto 22px;padding:0 16px;display:none;justify-content:center;gap:16px;font-size:13px;color:var(--muted)}
+#reader.flip .rstat{display:flex}
 /* مصحف المدينة 1441: ١٥ سطرًا، كل سطر ممتد من الحافة إلى الحافة كالمطبوع */
 .reader{max-width:calc(var(--qfs,26px) * 24 + 100px)}
 .mtext.loading{opacity:.35}
@@ -309,10 +331,12 @@ body.bulk-on{padding-bottom:130px}
       <div class="mtext" id="mtext"></div>
       <div class="mpf"><span class="readst" id="readSt"></span><span class="pn" id="mpNum"></span><span id="mpToday"></span></div>
     </article>
+    <div id="book"></div>
     <button class="nav" id="pgNext" title="الصفحة التالية">‹</button>
   </div>
+  <div class="rstat" id="rstat"></div>
   <div class="pact">
-    هذه الصفحة:
+    <span id="pactLbl">هذه الصفحة:</span>
     <button class="btn" data-pact="1"><i class="sw" style="background:var(--hifz)"></i>حفظ</button>
     <button class="btn" data-pact="2"><i class="sw" style="background:var(--fahm)"></i>فهم</button>
     <button class="btn" id="pRev">🔁 تمت المراجعة</button>
@@ -500,6 +524,9 @@ body.bulk-on{padding-bottom:130px}
 <script src="data.js"></script>
 <script src="quran-text.js"></script>
 <script src="mushaf-1441.js"></script>
+<!-- StPageFlip 2.0.7 (MIT): تقليب الصفحات؛ إن تعذّر تحميلها يعمل المصحف صفحةً صفحة دون حركة -->
+<script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"
+  integrity="sha384-L4eWrYFdqQ+LoGA0MMuqLqzV13x7SKkQaqacy4MED8e815dS37tTKlO/6xBEUpZW" crossorigin="anonymous"></script>
 <script src="app.js"></script>
 </body>
 </html>

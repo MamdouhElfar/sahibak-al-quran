@@ -531,27 +531,132 @@ $('mtext').addEventListener('pointerover', e => {
 });
 $('mtext').addEventListener('pointerleave', () => $('mtext').querySelectorAll('.w.hov').forEach(x => x.classList.remove('hov')));
 
+// ---------- المصحف كتابًا يُقلَّب (StPageFlip) ----------
+// المكتبة مصمّمة للكتب من اليسار إلى اليمين، فنعكس الترتيب: الفهرس ٠ = صفحة ٦٠٤ … الفهرس ٦٠٣ = صفحة ١
+// وفي العرض المزدوج تقع الصفحة الفردية يمينًا والزوجية يسارًا كالمصحف المطبوع
+const FLIP = HAS_M && typeof St !== 'undefined' && !!St.PageFlip;
+const idxOf = p => PAGES_N - p, pageAt = i => PAGES_N - i;
+// تُستخدم المكتبة في العرض المزدوج فقط (الشاشات العريضة)؛ فالتقليب للخلف لا يعمل فيها في وضع الصفحة الواحدة.
+// وعلى الشاشات الضيقة صفحة واحدة بحركة تقليب بسيطة وسحب بالإصبع في الاتجاهين
+let book = null, bookEls = [], bookOn = false;
+const wideEnough = () => $('reader').clientWidth >= 680;
+const filled = new Map();   // رقم الصفحة ← نسخة الرسم التي رُسمت بها
+let paintVer = 0;           // يزيد عند تغيّر الحالة فيُعاد رسم الصفحات
+
+function visiblePages() {
+  if (!bookOn) return [page];
+  let i = book.getCurrentPageIndex();
+  if (book.getOrientation() === 'landscape') {
+    i -= i % 2;
+    return [pageAt(i + 1), pageAt(i)].filter(p => p >= 1 && p <= PAGES_N);   // اليمنى أولًا
+  }
+  return [pageAt(i)];
+}
+function fillPage(p) {
+  if (p < 1 || p > PAGES_N || filled.get(p) === paintVer) return;
+  filled.set(p, paintVer);
+  const el = bookEls[idxOf(p)], [f] = pageB[p - 1], hifzSet = new Set(hifzToday);
+  el.innerHTML = `<div class="fpi"><div class="mph"><span>سورة ${SURAS[suraOf[f] - 1][0]}</span><span>الجزء ${ar(juzOf[f])}</span></div>` +
+    `<div class="mtext qcf${p <= 2 ? ' opening' : ''} loading" style="font-family:qcf${p}"></div><div class="fpn">${ar(p)}</div></div>`;
+  const mt = el.querySelector('.mtext'), ver = paintVer;
+  Promise.all([loadQcf(p), loadQcf(1)]).then(([a, b]) => {
+    if (filled.get(p) !== ver || el.querySelector('.mtext') !== mt) return;
+    mt.classList.remove('loading');
+    if (a && b) mt.innerHTML = mushafHtml(p, hifzSet);
+    else {   // احتياطي: نص عادي إن تعذّر تحميل خط الصفحة
+      mt.classList.remove('qcf', 'opening'); mt.classList.add('plain'); mt.style.fontFamily = '';
+      mt.innerHTML = plainHtml(pageB[p - 1][0], pageB[p - 1][1], hifzSet);
+    }
+  });
+}
+// حجم الخط من أبعاد الصفحة: ١٥ سطرًا بارتفاع ١٫٦٢ em، وأعرض سطر ≈ QCF_RATIO em
+function fitBook() {
+  const el = bookEls[idxOf(page)];
+  if (!el || !el.clientWidth) return;
+  const W = el.clientWidth * 0.92, H = el.clientHeight - 70;
+  $('book').style.setProperty('--pfs', Math.min(W / QCF_RATIO, H / (15 * 1.62 + 0.4)) + 'px');
+}
+function onFlip() {
+  if (!bookOn) return;
+  const vis = visiblePages(), i = idxOf(vis[0]);
+  page = vis[0];
+  if (readerMode === 'read') { lastPage = page; save(); }
+  for (let k = i - 4; k <= i + 5; k++) if (k >= 0 && k < PAGES_N) fillPage(pageAt(k));
+  [Math.min(...vis) - 1, Math.max(...vis) + 1].forEach(loadQcf);
+  fitBook();
+  updateReaderBar();
+  refreshPageActions();
+  startReadTimer();
+}
+function initBook() {
+  const host = $('book');
+  host.innerHTML = Array.from({ length: PAGES_N }, () => '<div class="fp"></div>').join('');
+  bookEls = [...host.children];
+  setBookMode(true);
+  book = new St.PageFlip(host, {
+    width: 520, height: 820, size: 'stretch', minWidth: 240, maxWidth: 900, minHeight: 380,
+    maxHeight: Math.max(480, innerHeight - 150), usePortrait: false, showCover: false,
+    drawShadow: true, maxShadowOpacity: 0.35, flippingTime: 750, mobileScrollSupport: true,
+    showPageCorners: true, disableFlipByClick: true, clickEventForward: true, startPage: idxOf(page),
+  });
+  book.loadFromHTML(bookEls);
+  book.on('flip', onFlip);
+  book.on('changeOrientation', () => { filled.clear(); onFlip(); });
+  new ResizeObserver(() => fitBook()).observe(host);
+}
+function updateReaderBar() {
+  const vis = visiblePages();
+  $('rPage').value = page;
+  $('pgPrev').disabled = Math.min(...vis) === 1;
+  $('pgNext').disabled = Math.max(...vis) === PAGES_N;
+  $('pactLbl').textContent = vis.length > 1 ? 'هاتان الصفحتان:' : 'هذه الصفحة:';
+}
+
+// التبديل بين الكتاب والصفحة الواحدة، مع نقل حالة القراءة إلى مكانها
+function setBookMode(on) {
+  bookOn = on;
+  $('reader').classList.toggle('flip', on);
+  if (on) $('rstat').append($('readSt'), $('mpToday'));          // تحت الكتاب
+  else { $('mpNum').before($('readSt')); $('mpNum').after($('mpToday')); }   // في تذييل الصفحة
+}
 function renderPage() {
+  if (FLIP && screen === 'reader' && wideEnough()) {
+    if (!book) initBook();
+    else {
+      if (!bookOn) setBookMode(true);
+      window.dispatchEvent(new Event('resize'));   // ربما كانت الشاشة مخفية أو بعرض آخر فلم يُحسب مقاسها
+      if (!visiblePages().includes(page)) book.turnToPage(idxOf(page));
+    }
+    paintVer++;
+    onFlip();
+    return;
+  }
+  if (bookOn) setBookMode(false);
   const [f] = pageB[page - 1];
   drawText(page);
   $('mpSura').textContent = `سورة ${SURAS[suraOf[f] - 1][0]}`;
   $('mpJuz').textContent = `الجزء ${ar(juzOf[f])}`;
   $('mpNum').textContent = ar(page);
-  $('rPage').value = page;
-  $('pgPrev').disabled = page === 1;
-  $('pgNext').disabled = page === PAGES_N;
+  updateReaderBar();
   refreshPageActions();
   startReadTimer();
 }
 
+// آيات الصفحات الظاهرة (صفحة أو صفحتان متتاليتان)
+function visibleAyat() {
+  const vis = visiblePages(), ids = [];
+  for (let i = pageB[Math.min(...vis) - 1][0]; i <= pageB[Math.max(...vis) - 1][1]; i++) ids.push(i);
+  return ids;
+}
 function refreshPageActions() {
-  const [f, t] = pageB[page - 1], c = count(f, t);
+  const ids = visibleAyat(), c = count(ids[0], ids[ids.length - 1]);
   document.querySelector('[data-pact="1"]').lastChild.textContent = c.h === c.n ? 'إلغاء الحفظ' : 'حفظ';
   document.querySelector('[data-pact="2"]').lastChild.textContent = c.f === c.n ? 'إلغاء الفهم' : 'فهم';
   $('pRev').disabled = !c.h;
   $('mpToday').textContent = `اليوم: ${safahat(readCount(today()))}`;
 }
 
+// تُحسب كل صفحة ظاهرة مقروءةً بعد بقائها ١٥ ثانية؛ وفي العرض المزدوج تُحسب اليمنى ثم اليسرى
 function startReadTimer() {
   clearInterval(readTimer); readTimer = null;
   const st = $('readSt');
@@ -560,18 +665,22 @@ function startReadTimer() {
     st.textContent = readerMode === 'rev' ? '🔁 جلسة مراجعة · لا تُحسب في ورد القراءة' : '🧠 جلسة حفظ · لا تُحسب في ورد القراءة';
     return;
   }
-  if (readOn(today()).includes(page)) { st.className = 'readst ok'; st.textContent = '✓ قُرئت اليوم'; return; }
+  const two = visiblePages().length > 1;
+  const todo = visiblePages().filter(p => !readOn(today()).includes(p));
+  const done = () => { st.className = 'readst ok'; st.textContent = two ? '✓ قُرئتا اليوم' : '✓ قُرئت اليوم'; };
+  if (!todo.length) { done(); return; }
   if (screen !== 'reader' || document.hidden) { st.className = 'readst'; st.textContent = ''; return; }
   readLeft = DWELL;
   const tick = () => {
     if (readLeft <= 0) {
-      clearInterval(readTimer); readTimer = null;
-      markRead(page); save();
-      st.className = 'readst ok'; st.textContent = '✓ قُرئت اليوم';
+      markRead(todo.shift()); save();
       refreshPageActions(); dashboard();
-      return;
+      if (!todo.length) { clearInterval(readTimer); readTimer = null; done(); return; }
+      readLeft = DWELL;
     }
-    st.className = 'readst'; st.textContent = `تُسجَّل القراءة بعد ${ar(readLeft)} ث`;
+    st.className = 'readst';
+    const which = !two ? 'القراءة' : todo.length > 1 ? 'الصفحة اليمنى' : 'الصفحة اليسرى';
+    st.textContent = `تُسجَّل ${which} بعد ${ar(readLeft)} ث`;
     readLeft--;
   };
   tick();
@@ -584,17 +693,35 @@ function openReader(p, mode = 'read') {
   if (mode === 'read') { lastPage = p; save(); }
   if (screen !== 'reader') showScreen('reader'); else { renderPage(); scrollTo(0, 0); }
 }
+// d = +١ الصفحة التالية في المصحف (تُقلَّب من اليسار)، و-١ السابقة
 function turn(d) {
+  if (bookOn) {
+    const vis = visiblePages();
+    if (d > 0 ? Math.max(...vis) >= PAGES_N : Math.min(...vis) <= 1) return;
+    if (d > 0) book.flipPrev('bottom'); else book.flipNext('bottom');
+    return;
+  }
   const p = page + d;
   if (p < 1 || p > PAGES_N) return;
   page = p;
   if (readerMode === 'read') { lastPage = p; save(); }
   renderPage();
+  // حركة تقليب: التالية تنفتح من حافتها اليمنى كورقة المصحف، والسابقة من اليسرى
+  const mp = $('mpage');
+  mp.classList.remove('turn-next', 'turn-prev'); void mp.offsetWidth;
+  mp.classList.add(d > 0 ? 'turn-next' : 'turn-prev');
   scrollTo({ top: 0, behavior: 'smooth' });
 }
+// عند تغيّر عرض النافذة قد يلزم الانتقال بين الكتاب والصفحة الواحدة
+let rzT = null;
+addEventListener('resize', e => {
+  if (!e.isTrusted || screen !== 'reader' || !FLIP) return;
+  clearTimeout(rzT);
+  rzT = setTimeout(() => { if (wideEnough() !== bookOn) renderPage(); }, 150);
+});
 $('pgNext').onclick = () => turn(1);
 $('pgPrev').onclick = () => turn(-1);
-// السحب باللمس: من اليسار إلى اليمين = الصفحة التالية (كتقليب المصحف)
+// السحب باللمس في العرض البسيط: من اليسار إلى اليمين = الصفحة التالية (كتقليب المصحف)
 let tx = null;
 $('mpage').addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: true });
 $('mpage').addEventListener('touchend', e => {
@@ -607,17 +734,17 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft') turn(1);
   else if (e.key === 'ArrowRight') turn(-1);
 });
+// تظليل الآية كلها عند المرور على كلماتها داخل الكتاب
+$('book').addEventListener('pointerover', e => {
+  const w = e.target.closest('.w');
+  $('book').querySelectorAll('.w.hov').forEach(x => x.classList.remove('hov'));
+  if (w) w.closest('.mtext').querySelectorAll(`.w[data-i="${w.dataset.i}"]`).forEach(x => x.classList.add('hov'));
+});
 
 document.querySelectorAll('[data-pact]').forEach(b => b.onclick = () => {
-  const [f, t] = pageB[page - 1], ids = [];
-  for (let i = f; i <= t; i++) ids.push(i);
-  applyAct(ids, +b.dataset.pact); save(); refreshAll(); renderPage();
+  applyAct(visibleAyat(), +b.dataset.pact); save(); refreshAll(); renderPage();
 });
-$('pRev').onclick = () => {
-  const [f, t] = pageB[page - 1], ids = [];
-  for (let i = f; i <= t; i++) ids.push(i);
-  applyReview(ids); save(); refreshAll(); renderPage();
-};
+$('pRev').onclick = () => { applyReview(visibleAyat()); save(); refreshAll(); renderPage(); };
 $('pOpen').onclick = () => openGroup('pages', page - 1);
 ['hContinue', 'wContinue'].forEach(id => $(id).onclick = () => openReader(lastPage));
 
