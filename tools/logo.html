@@ -3,28 +3,26 @@
 <head>
 <meta charset="utf-8">
 <title>شعار صاحبُك القرآن</title>
-<!-- شعار التطبيق (الاتجاه ٤: نستعليق متدرّج، «القرآن» أعلى و«صاحبُك» أسفل) بمقاس ٥١٢؛ يرسمه tools/render-icon.js إلى PNG -->
+<!-- شعار التطبيق (التصميم «د»: رقعة مائلة، «القرآن» أعلى و«صاحبُك» أسفل، على كريمي بإطار ذهبي)
+     بمقاس ٥١٢ = تصميم لوحة التصميم (٣٦٠) × ١٫٤٢٢؛ يرسمه tools/render-icon.js إلى PNG -->
 <link href="../fonts/ui.css" rel="stylesheet">
 <style>
 html,body{margin:0;background:transparent}
-.tile{position:relative;width:512px;height:512px;border-radius:113px;background:#131518;overflow:hidden}
-.tile svg{position:absolute;inset:0;width:512px;height:512px;opacity:.18}
-.box{position:absolute;width:422px;height:384px;left:45px;top:64px}
-.w{position:absolute;font-family:'Noto Nastaliq Urdu',serif;font-weight:700;line-height:2;white-space:nowrap}
-.q{left:5px;top:-24px;font-size:92px;color:#fbf6e8}
-.s{right:17px;top:146px;font-size:108px;color:#e8c766}
+.tile{position:relative;width:512px;height:512px;box-sizing:border-box;border-radius:114px;background:#fbf6e8;border:4px solid #b8901a;overflow:hidden}
+.box{position:absolute;left:31px;top:74px;width:441px;height:356px;transform:rotate(-9deg)}
+.w{position:absolute;font-family:'Aref Ruqaa',serif;font-weight:700;line-height:1;white-space:nowrap}
+.q{top:-10px;left:4px;font-size:156px;color:#1f5e4a}
+.s{bottom:21px;right:-14px;font-size:185px;color:#b8901a}
+.dot{position:absolute;top:321px;left:11px;width:16px;height:16px;background:#b8901a;transform:rotate(45deg)}
 </style>
 </head>
 <body>
 <div class="tile" id="tile">
-  <svg viewBox="0 0 100 100" aria-hidden="true">
-    <circle cx="50" cy="50" r="44" fill="none" stroke="#e8c766" stroke-width="0.4"></circle>
-    <circle cx="50" cy="50" r="40" fill="none" stroke="#e8c766" stroke-width="0.4"></circle>
-  </svg>
   <div class="box">
     <span class="w q">القرآن</span>
     <span class="w s">صاحبُك</span>
   </div>
+  <span class="dot" aria-hidden="true"></span>
 </div>
 </body>
 </html>
