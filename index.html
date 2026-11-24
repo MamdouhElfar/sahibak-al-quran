@@ -124,7 +124,7 @@ input[type=number]{width:70px}
 .sura-h{font-family:Amiri,serif;text-align:center;font-size:21px;font-weight:700;color:var(--accent);border:1.5px solid var(--frame);border-radius:6px;padding:2px 0;margin:10px 0 4px;line-height:1.8;background:color-mix(in srgb,var(--frame) 10%,transparent)}
 .basm{text-align:center;text-align-last:center;display:block;margin-bottom:2px}
 /* المصحف كتابًا يُقلَّب */
-#book{display:none}
+#reader:not(.flip) #book{display:none!important}   /* المكتبة تضع display وminWidth مباشرةً على العنصر */
 #reader.flip #book{display:block;flex:1;min-width:0}
 #reader.flip .mpage{display:none}
 #reader.flip .reader{max-width:calc(var(--qfs,26px) * 44 + 120px);align-items:center}
@@ -143,6 +143,25 @@ input[type=number]{width:70px}
 @keyframes turnPrev{from{transform:perspective(1400px) rotateY(75deg);transform-origin:left center;opacity:.4}
   to{transform:perspective(1400px) rotateY(0);transform-origin:left center;opacity:1}}
 @media (prefers-reduced-motion:reduce){.mpage.turn-next,.mpage.turn-prev{animation:none}}
+/* لوحة التفسير: تُثبَّت يسار الشاشة ويتسع الكتاب لما بقي */
+#tafsir{position:fixed;top:64px;bottom:14px;left:14px;width:380px;z-index:7;background:var(--card);border:1px solid var(--line);
+  border-radius:16px;box-shadow:0 10px 40px #0002;display:flex;flex-direction:column;overflow:hidden}
+#tafsir[hidden]{display:none}
+#reader.tf-open .reader,#reader.tf-open .rbar,#reader.tf-open .pact,#reader.tf-open .rstat{margin-left:408px;margin-right:16px}
+.tfh{display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.tfh h2{flex:1;margin:0;font-family:Amiri,serif;font-size:20px;color:var(--accent)}
+.tfa{font-family:"Amiri Quran",Amiri,serif;font-size:21px;line-height:2;padding:10px 14px;background:color-mix(in srgb,var(--frame) 10%,var(--card));border-bottom:1px solid var(--line);max-height:30%;overflow:auto}
+.tfsel{padding:8px 14px;border-bottom:1px solid var(--line)}
+.tfb{flex:1;overflow:auto;padding:12px 16px;font-family:Amiri,serif;font-size:18px;line-height:1.95}
+.tftxt{white-space:pre-line}
+.tftxt .tq{color:var(--accent);font-weight:700}
+.tfnote{font-family:Tajawal;font-size:12px;color:var(--muted);margin-bottom:6px}
+.tff{padding:10px 14px;border-top:1px solid var(--line);font-size:13px}
+.modal{position:fixed;inset:0;z-index:11;display:none;background:#0006;align-items:center;justify-content:center;padding:16px}
+.modal.open{display:flex}
+.tfdl{width:100%;border-collapse:collapse;font-size:14px}
+.tfdl td{padding:9px 4px;border-top:1px solid var(--line);vertical-align:middle}
+.tfdl td.row{justify-content:flex-end;gap:6px}
 .rstat{max-width:720px;margin:-18px auto 22px;padding:0 16px;display:none;justify-content:center;gap:16px;font-size:13px;color:var(--muted)}
 #reader.flip .rstat{display:flex}
 /* مصحف المدينة 1441: ١٥ سطرًا، كل سطر ممتد من الحافة إلى الحافة كالمطبوع */
@@ -335,6 +354,24 @@ body.bulk-on{padding-bottom:130px}
     <button class="nav" id="pgNext" title="الصفحة التالية">‹</button>
   </div>
   <div class="rstat" id="rstat"></div>
+  <aside id="tafsir" hidden aria-label="تفسير الآية">
+    <div class="tfh">
+      <h2 id="tfRef"></h2>
+      <button class="ib" id="tfPrev" title="الآية السابقة">›</button>
+      <button class="ib" id="tfNext" title="الآية التالية">‹</button>
+      <button class="ib" id="tfClose" title="إغلاق (Esc)">✕</button>
+    </div>
+    <div class="tfa" id="tfAyah"></div>
+    <div class="tfsel row">
+      <select id="tfSel" aria-label="اختر التفسير"></select>
+      <button class="lnk" id="tfMore">تفاسير أخرى…</button>
+    </div>
+    <div class="tfb" id="tfBody"></div>
+    <div class="tff row">
+      <button class="btn pri" id="tfFahm"></button>
+      <span class="muted" id="tfState"></span>
+    </div>
+  </aside>
   <div class="pact">
     <span id="pactLbl">هذه الصفحة:</span>
     <button class="btn" data-pact="1"><i class="sw" style="background:var(--hifz)"></i>حفظ</button>
@@ -474,6 +511,16 @@ body.bulk-on{padding-bottom:130px}
     <br>نص المصحف من Quran.com · بيانات الصفحات والأجزاء من Tanzil.net · التفسير من Quran.com
   </footer>
 </section>
+
+<!-- تنزيل التفاسير -->
+<div id="tfDl" class="modal">
+  <div class="box" style="max-width:640px">
+    <div class="bh"><h2>التفاسير</h2><button class="ib" id="tfDlClose">✕</button></div>
+    <div style="padding:10px 16px;font-size:13px" class="muted">تُنزَّل التفاسير من Quran.com وتُحفظ على جهازك لتعمل دون اتصال. نزّل سورة واحدة أو التفسير كاملًا.</div>
+    <div style="overflow:auto;padding:0 16px"><table class="tfdl" id="tfDlList"></table></div>
+    <div class="bf"><span class="muted" id="tfDlMsg" style="font-size:13px"></span></div>
+  </div>
+</div>
 
 <!-- شريط التحديد المتعدد -->
 <div id="bulk">

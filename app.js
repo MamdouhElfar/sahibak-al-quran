@@ -539,7 +539,12 @@ const idxOf = p => PAGES_N - p, pageAt = i => PAGES_N - i;
 // تُستخدم المكتبة في العرض المزدوج فقط (الشاشات العريضة)؛ فالتقليب للخلف لا يعمل فيها في وضع الصفحة الواحدة.
 // وعلى الشاشات الضيقة صفحة واحدة بحركة تقليب بسيطة وسحب بالإصبع في الاتجاهين
 let book = null, bookEls = [], bookOn = false;
-const wideEnough = () => $('reader').clientWidth >= 680;
+const wideEnough = () => $('reader').clientWidth - ($('reader').classList.contains('tf-open') ? 408 : 0) >= 680;
+// بعد تغيّر المساحة المتاحة (لوحة التفسير): بدّل الوضع إن لزم، وإلا أعِد حساب مقاس الكتاب
+function relayoutReader() {
+  if (screen === 'reader' && FLIP && wideEnough() !== bookOn) renderPage();
+  else window.dispatchEvent(new Event('resize'));
+}
 const filled = new Map();   // رقم الصفحة ← نسخة الرسم التي رُسمت بها
 let paintVer = 0;           // يزيد عند تغيّر الحالة فيُعاد رسم الصفحات
 
@@ -1171,6 +1176,222 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeSheet();
   else if (e.key === 'ArrowRight') $('prev').click();
   else if (e.key === 'ArrowLeft') $('next').click();
+});
+
+// ======================================================================
+//  التفسير: اضغط على أي آية في المصحف ليظهر تفسيرها
+// ======================================================================
+// الميسر مضمَّن في التطبيق؛ وبقية التفاسير تُنزَّل من Quran.com لكل سورة أو كاملة وتُحفظ في IndexedDB
+const TAFASIR = [
+  { id: 16, name: 'التفسير الميسر', builtin: true },
+  { id: 91, name: 'تفسير السعدي' },
+  { id: 14, name: 'تفسير ابن كثير' },
+  { id: 15, name: 'تفسير الطبري' },
+  { id: 90, name: 'تفسير القرطبي' },
+  { id: 94, name: 'تفسير البغوي' },
+  { id: 93, name: 'التفسير الوسيط' },
+];
+const tfName = id => TAFASIR.find(t => t.id === id)?.name || '';
+let tfId = 16, tfAyah = -1;
+try { tfId = +localStorage.getItem(KEY + '.tf') || 16; } catch (e) {}
+if (!TAFASIR.some(t => t.id === tfId)) tfId = 16;
+
+// مخزن بسيط فوق IndexedDB: المفتاح «رقم التفسير:رقم السورة» والقيمة مصفوفة نصوص آياتها
+const tfDb = (() => {
+  let p = null;
+  const open = () => p ||= new Promise((res, rej) => {
+    const r = indexedDB.open('quranMap', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('tafsir');
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => { p = null; rej(r.error); };
+  });
+  const run = (mode, fn) => open().then(db => new Promise((res, rej) => {
+    const t = db.transaction('tafsir', mode), req = fn(t.objectStore('tafsir'));
+    t.oncomplete = () => res(req.result);
+    t.onerror = () => rej(t.error);
+  }));
+  return {
+    get: k => run('readonly', s => s.get(k)),
+    put: (k, v) => run('readwrite', s => s.put(v, k)),
+    del: k => run('readwrite', s => s.delete(k)),
+    keys: () => run('readonly', s => s.getAllKeys()),
+  };
+})();
+const tfHave = new Set();   // «رقم:سورة» المنزَّلة
+const tfReady = tfDb.keys().then(ks => ks.forEach(k => tfHave.add(k))).catch(() => {});
+
+// الميسر يُحمَّل عند أول حاجة إليه (نحو ٢ ميجا)
+let muyassarP = null;
+const loadMuyassar = () => muyassarP ||= new Promise((res, rej) => {
+  if (typeof TAFSIR_MUYASSAR !== 'undefined') return res();
+  const s = document.createElement('script');
+  s.src = 'tafsir-muyassar.js';
+  s.onload = () => res();
+  s.onerror = () => { muyassarP = null; rej(); };
+  document.head.append(s);
+});
+
+// يحوّل HTML القادم من الخادم إلى نص خالص (DOMParser لا ينفّذ أي سكربت)
+function cleanTafsir(h) {
+  const d = new DOMParser().parseFromString(`<body>${h || ''}</body>`, 'text/html');
+  d.querySelectorAll('br').forEach(b => b.replaceWith('\n'));
+  d.querySelectorAll('p,div,h1,h2,h3,h4,h5,li').forEach(e => e.append('\n'));
+  return d.body.textContent.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+}
+const escHtml = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// نص تفسير الآية؛ وإن فسّرها المفسّر ضمن مجموعة آيات يُعاد تفسير أول المجموعة
+async function tafsirOf(id, i) {
+  const s = suraOf[i], a = ayahOf(i);
+  let arr;
+  if (id === 16) { await loadMuyassar(); arr = TAFSIR_MUYASSAR.slice(start[s], start[s] + SURAS[s - 1][1]); }
+  else arr = await tfDb.get(`${id}:${s}`);
+  if (!arr) return null;
+  let k = a - 1;
+  while (k > 0 && !arr[k]) k--;
+  return { text: arr[k] || '', from: k + 1, a };
+}
+
+async function fetchSura(id, s) {
+  const texts = Array(SURAS[s - 1][1]).fill('');
+  for (let page = 1; page;) {
+    const r = await fetch(`https://api.quran.com/api/v4/tafsirs/${id}/by_chapter/${s}?per_page=50&page=${page}`);
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    d.tafsirs.forEach(x => { texts[+x.verse_key.split(':')[1] - 1] = cleanTafsir(x.text); });
+    page = d.pagination.next_page;
+  }
+  await tfDb.put(`${id}:${s}`, texts);
+  tfHave.add(`${id}:${s}`);
+}
+
+// ---------- اللوحة ----------
+const tfStyle = document.createElement('style');
+document.head.append(tfStyle);
+function openTafsir(i) {
+  tfAyah = i;
+  tfStyle.textContent = `.w[data-i="${i}"]{background:color-mix(in srgb,var(--both) 32%,transparent)!important}`;
+  if ($('tafsir').hidden) {
+    $('tafsir').hidden = false;
+    $('reader').classList.add('tf-open');
+    relayoutReader();   // ليُعاد حساب مقاس الكتاب بجوار اللوحة
+  }
+  drawTafsir();
+}
+function closeTafsir() {
+  $('tafsir').hidden = true;
+  $('reader').classList.remove('tf-open');
+  tfStyle.textContent = '';
+  tfAyah = -1;
+  relayoutReader();
+}
+let tfSeq = 0;
+async function drawTafsir() {
+  const i = tfAyah, seq = ++tfSeq;
+  if (i < 0) return;
+  const s = suraOf[i], a = ayahOf(i);
+  $('tfRef').textContent = `${SURAS[s - 1][0]} · الآية ${ar(a)}`;
+  $('tfAyah').textContent = AYAT[i];
+  $('tfPrev').disabled = i === 0;
+  $('tfNext').disabled = i === TOTAL - 1;
+  $('tfSel').innerHTML = TAFASIR.filter(t => t.builtin || [...tfHave].some(k => k.startsWith(t.id + ':')))
+    .map(t => `<option value="${t.id}"${t.id === tfId ? ' selected' : ''}>${t.name}</option>`).join('');
+  if (!$('tfSel').value) $('tfSel').value = tfId = 16;
+  const fahm = (state[i] & 2) !== 0;
+  $('tfFahm').textContent = fahm ? 'إلغاء «فهمتُها»' : 'فهمتُ هذه الآية ✓';
+  $('tfFahm').classList.toggle('pri', !fahm);
+  $('tfState').textContent = fahm ? '✓ مسجّلة في «فهم»' : '';
+  const body = $('tfBody');
+  body.innerHTML = '<span class="muted">جارٍ التحميل…</span>';
+  let r = null;
+  try { r = await tafsirOf(tfId, i); } catch (e) {}
+  if (seq !== tfSeq) return;
+  if (!r && tfId === 16) { body.innerHTML = '<span class="red">تعذّر تحميل ملف التفسير الميسر.</span>'; return; }
+  if (!r) {
+    body.innerHTML = `<div class="muted">تفسير هذه السورة غير منزَّل من «${escHtml(tfName(tfId))}».</div>` +
+      `<button class="btn" id="tfGetHere" style="margin-top:8px">تحميل تفسير سورة ${SURAS[s - 1][0]}</button>`;
+    $('tfGetHere').onclick = async () => {
+      body.innerHTML = '<span class="muted">جارٍ التنزيل…</span>';
+      try { await fetchSura(tfId, s); } catch (e) { body.innerHTML = '<span class="red">تعذّر التنزيل؛ تحقّق من الاتصال بالإنترنت.</span>'; return; }
+      drawTafsir();
+    };
+    return;
+  }
+  const note = r.from !== r.a ? `<div class="tfnote">تفسير هذه الآية ضمن تفسير الآيات من ${ar(r.from)}</div>` : '';
+  body.innerHTML = note + (r.text
+    ? `<div class="tftxt">${escHtml(r.text)
+        .replace(/\(([^()\n]{1,90})\)/g, '<span class="tq">($1)</span>')
+        .replace(/\{([^{}\n]{1,120})\}/g, '<span class="tq">﴿$1﴾</span>')}</div>`
+    : '<span class="muted">لا يوجد نص لهذه الآية في هذا التفسير.</span>');
+  body.scrollTop = 0;
+}
+$('tfClose').onclick = closeTafsir;
+$('tfPrev').onclick = () => { if (tfAyah > 0) openTafsir(tfAyah - 1); };
+$('tfNext').onclick = () => { if (tfAyah < TOTAL - 1) openTafsir(tfAyah + 1); };
+$('tfSel').onchange = e => {
+  tfId = +e.target.value;
+  try { localStorage.setItem(KEY + '.tf', tfId); } catch (err) {}
+  drawTafsir();
+};
+$('tfFahm').onclick = () => {
+  if (tfAyah < 0) return;
+  applyAct([tfAyah], 2); save(); refreshAll(); refreshPageActions(); drawTafsir();
+};
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('tafsir').hidden && cur < 0) closeTafsir(); });
+
+// الضغط على كلمة يفتح تفسير آيتها؛ والسحب (لتقليب الصفحة) لا يُعدّ ضغطًا
+let downXY = null;
+['book', 'mtext'].forEach(id => {
+  $(id).addEventListener('pointerdown', e => { downXY = [e.clientX, e.clientY]; }, true);
+  $(id).addEventListener('pointerup', e => {
+    const w = e.target.closest('.w, .ay');
+    if (!w || !downXY || Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]) > 6) return;
+    openTafsir(+w.dataset.i);
+  }, true);
+});
+
+// ---------- تنزيل التفاسير ----------
+let dlBusy = false;
+function tfDlRender() {
+  const s = suraOf[tfAyah >= 0 ? tfAyah : pageB[page - 1][0]];
+  $('tfDlList').innerHTML = TAFASIR.map(t => {
+    if (t.builtin) return `<tr><td><b>${t.name}</b></td><td class="muted">مضمَّن في التطبيق</td><td></td></tr>`;
+    const n = SURAS.reduce((c, _, k) => c + tfHave.has(`${t.id}:${k + 1}`), 0);
+    const st = n === 114 ? 'منزَّل كاملًا ✓' : n ? `${ar(n)} من ١١٤ سورة` : 'غير منزَّل';
+    return `<tr data-id="${t.id}"><td><b>${t.name}</b></td><td class="muted">${st}</td><td class="row">` +
+      (tfHave.has(`${t.id}:${s}`) ? '' : `<button class="btn" data-dl="sura">سورة ${SURAS[s - 1][0]}</button>`) +
+      (n < 114 ? '<button class="btn" data-dl="all">كاملًا</button>' : '') +
+      (n ? '<button class="lnk" data-dl="del">حذف</button>' : '') + '</td></tr>';
+  }).join('');
+  $('tfDlList').querySelectorAll('button').forEach(b => b.disabled = dlBusy);
+}
+$('tfMore').onclick = async () => { await tfReady; tfDlRender(); $('tfDlMsg').textContent = ''; $('tfDl').classList.add('open'); };
+$('tfDlClose').onclick = () => { $('tfDl').classList.remove('open'); drawTafsir(); };
+$('tfDl').addEventListener('click', e => { if (e.target.id === 'tfDl') $('tfDlClose').click(); });
+$('tfDlList').addEventListener('click', async e => {
+  const b = e.target.closest('[data-dl]'); if (!b || dlBusy) return;
+  const id = +b.closest('tr').dataset.id, act = b.dataset.dl, msg = $('tfDlMsg');
+  if (act === 'del') {
+    if (!confirm(`حذف «${tfName(id)}» المنزَّل من جهازك؟ يمكنك تنزيله مرة أخرى لاحقًا.`)) return;
+    for (let k = 1; k <= 114; k++) if (tfHave.has(`${id}:${k}`)) { await tfDb.del(`${id}:${k}`); tfHave.delete(`${id}:${k}`); }
+    if (tfId === id) tfId = 16;
+    tfDlRender(); return;
+  }
+  const s = suraOf[tfAyah >= 0 ? tfAyah : pageB[page - 1][0]];
+  const list = act === 'sura' ? [s] : [...Array(114)].map((_, k) => k + 1).filter(k => !tfHave.has(`${id}:${k}`));
+  dlBusy = true; tfDlRender();
+  try {
+    for (let k = 0; k < list.length; k++) {
+      msg.textContent = `جارٍ تنزيل «${tfName(id)}»: ${ar(k + 1)} من ${ar(list.length)}…`;
+      await fetchSura(id, list[k]);
+    }
+    msg.textContent = `تم تنزيل «${tfName(id)}» ✓`;
+    tfId = id;
+    try { localStorage.setItem(KEY + '.tf', tfId); } catch (err) {}
+  } catch (err) {
+    msg.textContent = 'توقّف التنزيل؛ تحقّق من الاتصال بالإنترنت ثم أعد المحاولة (ما نُزِّل محفوظ).';
+  }
+  dlBusy = false; tfDlRender();
 });
 
 // ======================================================================
