@@ -20,7 +20,7 @@
 
     // التفسير
     openTafsir(start[2] + 1); await wait(1500);
-    checks['التفسير الميسر يظهر'] = $('tfBody').textContent.length > 40 && !$('tafsir').hidden;
+    checks['التفسير الميسر يظهر'] = $('tfBody').textContent.length > 40 && !$('tfPanel').hidden;
     closeTafsir();
 
     // موضع الورد لا يتحرك بالتصفّح
@@ -31,10 +31,19 @@
     const c = addCat('اختبار'); toggleRef(start[2], c); showScreen('refs'); await wait(200);
     checks['المرجعيات تُضاف وتُعرض'] = document.querySelectorAll('#riList .ri').length === 1;
 
-    // الخريطة: عرض الصفحات بعرض بقية العروض
-    showScreen('mapScreen'); view = 'pages'; renderMap(); await wait(200);
-    const pw = $('map').getBoundingClientRect().width; view = 'suras'; renderMap();
-    checks['عرض الصفحات بعرض الخريطة'] = Math.abs(pw - $('map').getBoundingClientRect().width) < 2;
+    // الخريطة: الضغط المطوّل يبدأ التحديد المتعدد، والضغطة القصيرة تفتح اللوحة
+    showScreen('mapScreen'); view = 'suras'; renderMap(); await wait(200);
+    const tile = blkEls[1], rc = tile.getBoundingClientRect(), ev = (t, o = {}) => tile.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: rc.x + 5, clientY: rc.y + 5, button: 0, pointerType: 'mouse', ...o }));
+    ev('pointerdown'); await wait(600); ev('pointerup'); tile.click();
+    checks['الضغط المطوّل يبدأ التحديد المتعدد'] = picking && picked.has(1) && cur < 0;
+    setPicking(false);
+    tile.click(); await wait(100);
+    checks['الضغطة القصيرة تفتح لوحة السورة'] = cur === 1 && sView === 'suras';
+    $('close').click();
+    checks['لا عرض للصفحات في الخريطة'] = !document.querySelector('#views [data-v="pages"]');
+
+    // لوحة التفسير لا تختلط بزر التفسير في لوحة الآيات
+    checks['لوحة التفسير بمعرّف فريد'] = document.querySelectorAll('#tfPanel').length === 1 && !document.getElementById('tafsir');
 
     // الإعدادات: الإصدار وحالة التحديث، وشكل المصحف «نص متصل»
     showScreen('settings'); await wait(200);

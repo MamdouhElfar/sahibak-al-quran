@@ -60,7 +60,23 @@ body{padding-right:212px}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--card)}
 .seg button{border:0;background:none;color:var(--muted);font:inherit;font-size:14px;padding:6px 15px;cursor:pointer;white-space:nowrap}
 .seg button.on{background:var(--accent);color:var(--bg)}
-.screen{display:none}.screen.on{display:block}
+.screen{display:none}.screen.on{display:block;animation:screenIn .22s ease-out}
+@keyframes screenIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.screen.on{animation:none}}
+html{scroll-behavior:smooth}
+.card{transition:box-shadow .2s,border-color .2s}
+.card:hover{box-shadow:0 6px 22px #0000000d}
+#tabs button,#tabs2 button,.btn,.rc,.rchip{transition:background-color .15s,color .15s,border-color .15s}
+/* رأس الرئيسية */
+.hero{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:4px 4px 2px}
+.hero>div:first-child{flex:1;min-width:240px}
+.hdate{font-family:Amiri,serif;font-size:24px;font-weight:700;color:var(--accent)}
+.hsum{font-size:14px;color:var(--muted);margin-top:2px}
+.hstreaks{display:flex;gap:8px;flex-wrap:wrap}
+.hst{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 14px;text-align:center;min-width:96px}
+.hst b{display:block;font-size:22px}
+.hst span{font-size:12px;color:var(--muted)}
+.hstl{font-size:13px;align-self:center}
 
 /* ---------- عناصر عامة ---------- */
 .dash{max-width:1320px;margin:auto;padding:18px 16px 30px;display:grid;gap:14px;grid-template-columns:1fr 1fr}
@@ -86,9 +102,10 @@ input[type=number]{width:70px}
 #tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--bg);font-size:13px;padding:5px 9px;border-radius:7px;display:none;z-index:20;white-space:nowrap}
 
 /* ---------- الرئيسية ---------- */
-.pie{grid-row:span 3;display:flex;flex-direction:column;align-items:center}
+.pie{display:flex;flex-direction:column;align-items:center}
+.pie .act,.pie .go{width:100%;max-width:360px}
 .pie h3{align-self:stretch}
-#donut{width:100%;max-width:330px;height:auto;display:block}
+#donut{width:100%;max-width:280px;height:auto;display:block}
 #donut .seg-arc{cursor:pointer;transition:stroke-width .15s}
 #donut .seg-arc:hover{stroke-width:36}
 #donut text{font-family:Tajawal;fill:var(--ink)}
@@ -102,8 +119,12 @@ input[type=number]{width:70px}
 .wbig{font-size:30px;font-weight:700}
 .wbig small{font-size:15px;color:var(--muted);font-weight:500}
 .done-msg{color:var(--accent);font-weight:700}
-.prow2{padding:12px 0;border-top:1px solid var(--line)}
-.plan h3+.prow2{border-top:0;padding-top:2px}
+/* خطة اليوم: ثلاثة أعمدة متجاورة */
+.plan{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.plan h3{grid-column:1/-1;margin-bottom:0}
+.prow2{padding:14px;border-radius:14px;background:var(--bg);display:flex;flex-direction:column}
+.prow2 .row{margin-top:auto}
+.prow2.done{background:color-mix(in srgb,var(--accent) 7%,var(--bg))}
 .ph{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:15px}
 .ph .pv{font-size:14px;color:var(--muted)}
 .ph .pv b{font-size:18px;color:var(--ink)}
@@ -160,9 +181,9 @@ input[type=number]{width:70px}
   to{transform:perspective(1400px) rotateY(0);transform-origin:left center;opacity:1}}
 @media (prefers-reduced-motion:reduce){.mpage.turn-next,.mpage.turn-prev{animation:none}}
 /* لوحة التفسير: تُثبَّت يسار الشاشة ويتسع الكتاب لما بقي */
-#tafsir{position:fixed;top:14px;bottom:14px;left:14px;width:380px;z-index:7;background:var(--card);border:1px solid var(--line);
+#tfPanel{position:fixed;top:14px;bottom:14px;left:14px;width:380px;z-index:7;background:var(--card);border:1px solid var(--line);
   border-radius:16px;box-shadow:0 10px 40px #0002;display:flex;flex-direction:column;overflow:hidden}
-#tafsir[hidden]{display:none}
+#tfPanel[hidden]{display:none}
 #reader.tf-open .reader,#reader.tf-open .rbar,#reader.tf-open .pact,#reader.tf-open .rstat{margin-left:408px;margin-right:16px}
 .tfh{display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}
 .tfh h2{flex:1;margin:0;font-family:Amiri,serif;font-size:20px;color:var(--accent)}
@@ -178,7 +199,9 @@ input[type=number]{width:70px}
 .tfdl{width:100%;border-collapse:collapse;font-size:14px}
 .tfdl td{padding:9px 4px;border-top:1px solid var(--line);vertical-align:middle}
 .tfdl td.row{justify-content:flex-end;gap:6px}
-.nav{display:none!important}   /* التقليب بالكيبورد وسحب الورقة يكفيان */
+.nav{display:none!important}
+/* الضغط المستمر لتقليب الورقة لا يحدّد النص */
+#book,#mtext,.fp,.mpage{-webkit-user-select:none;user-select:none}   /* التقليب بالكيبورد وسحب الورقة يكفيان */
 .wchip.here{border-color:var(--accent);color:var(--accent);font-weight:700}
 .recent{justify-content:center;gap:4px;font-size:13px;min-height:22px;margin-top:4px}
 /* المرجعيات */
@@ -215,6 +238,12 @@ input[type=number]{width:70px}
 .rtag{color:var(--accent)}
 .rnote{width:100%;box-sizing:border-box;font:inherit;font-size:14px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);padding:8px 10px;min-height:44px;resize:vertical;margin-bottom:8px}
 .rempty{background:var(--card);border:1px dashed var(--line);border-radius:14px;padding:30px;text-align:center;color:var(--muted);line-height:2}
+.kset{margin-top:10px;padding:12px;border-radius:12px;background:var(--bg)}
+.kset input[type=number]{width:80px}
+.maphint{font-size:13px}
+/* الضغط المطوّل: تمتلئ حلقة حول البطاقة حتى يبدأ التحديد المتعدد */
+.t.holding{animation:hold .45s linear forwards}
+@keyframes hold{from{box-shadow:0 0 0 0 var(--accent)}to{box-shadow:0 0 0 3px var(--accent);transform:scale(.97)}}
 .remrows{display:flex;gap:12px;flex-wrap:wrap}
 .remrow{display:flex;align-items:center;gap:8px;background:var(--bg);border-radius:12px;padding:10px 14px;font-size:14px;cursor:pointer}
 .remrow input[type=time]{font:inherit;font-size:14px;padding:3px 6px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
@@ -348,13 +377,12 @@ body.bulk-on{padding-bottom:130px}
     <button class="lnk" id="bkLater">لاحقًا</button>
   </div>
 
-  <div class="card pie">
-    <h3>تقدّمك في القرآن</h3>
-    <svg id="donut" viewBox="-28 -28 316 316" role="img" aria-label="رسم دائري لتقدّم الحفظ والفهم"></svg>
-    <table class="plegend" id="plegend"></table>
+  <div class="hero wide">
+    <div><div class="hdate" id="heroDate"></div><div class="hsum" id="heroSum"></div></div>
+    <div class="hstreaks" id="heroStreaks"></div>
   </div>
 
-  <div class="card plan">
+  <div class="card plan wide">
     <h3>خطة اليوم</h3>
     <div class="prow2" id="planRead">
       <div class="ph"><b>📖 القراءة</b><span class="pv"></span></div>
@@ -376,12 +404,15 @@ body.bulk-on{padding-bottom:130px}
     </div>
   </div>
 
-  <div class="card">
-    <h3>ملخص الحفظ والفهم</h3>
-    <div class="kpis" id="kpis"></div>
+  <div class="card pie">
+    <h3>تقدّمك في القرآن</h3>
+    <svg id="donut" viewBox="-28 -28 316 316" role="img" aria-label="رسم دائري لتقدّم الحفظ والفهم"></svg>
+    <table class="plegend" id="plegend"></table>
     <div class="act" id="act"></div>
     <button class="btn go" data-goto="mapScreen">🗺 افتح الخريطة وسجّل محفوظك</button>
   </div>
+
+  <div class="kpis" id="kpis" hidden></div>
 
   <div class="card" id="review">
     <div class="rvh">
@@ -416,11 +447,11 @@ body.bulk-on{padding-bottom:130px}
     <button class="nav" id="pgNext" title="الصفحة التالية">‹</button>
   </div>
   <div class="rstat" id="rstat"></div>
-  <aside id="tafsir" hidden aria-label="تفسير الآية">
+  <aside id="tfPanel" hidden aria-label="تفسير الآية">
     <div class="tfh">
       <h2 id="tfRef"></h2>
-      <button class="ib" id="tfPrev" title="الآية السابقة">›</button>
-      <button class="ib" id="tfNext" title="الآية التالية">‹</button>
+      <button class="ib" id="tfNext" title="الآية التالية">›</button>
+      <button class="ib" id="tfPrev" title="الآية السابقة">‹</button>
       <button class="ib" id="tfClose" title="إغلاق (Esc)">✕</button>
     </div>
     <div class="tfa" id="tfAyah"></div>
@@ -471,7 +502,19 @@ body.bulk-on{padding-bottom:130px}
     <h3>الختمة الحالية</h3>
     <div id="wKhatma"></div>
     <div class="row" style="margin-top:10px">
-      <button class="lnk" id="newKhatma">بدء ختمة جديدة</button>
+      <button class="btn" id="kOpen">⚙️ ضبط الختمة</button>
+    </div>
+    <div class="kset" id="kSet" hidden>
+      <div class="row">وصلتُ في ختمتي الحالية إلى:
+        <select id="kSura" aria-label="السورة"></select>
+        <span class="muted">صفحة</span> <input type="number" id="kPage" min="1" max="604" aria-label="رقم الصفحة">
+      </div>
+      <div class="muted" id="kHint" style="font-size:12px;margin:6px 0"></div>
+      <div class="row">
+        <button class="btn pri" id="kSave">اعتمد هذا الموضع</button>
+        <button class="btn" id="kNew">ابدأ ختمة جديدة من الفاتحة</button>
+        <button class="lnk" id="kCancel">إلغاء</button>
+      </div>
     </div>
   </div>
 
@@ -553,10 +596,9 @@ body.bulk-on{padding-bottom:130px}
   <div class="mapbar">
     <div class="seg" id="views">
       <button data-v="suras">السور</button>
-      <button data-v="pages">الصفحات</button>
       <button data-v="juz">الأجزاء</button>
     </div>
-    <button class="btn" id="pickBtn"></button>
+    <span class="muted maphint">اضغط مطوّلًا على سورة أو جزء لتحديد عدة مواضع معًا</span>
   </div>
   <div id="map"></div>
   <div class="legend">
@@ -686,6 +728,7 @@ body.bulk-on{padding-bottom:130px}
     <button class="btn" data-bact="0">مسح</button>
     <button class="btn" id="bRev">🔁 تمت المراجعة</button>
     <button class="btn" id="bClear">إلغاء التحديد</button>
+    <button class="btn pri" id="bDone">✓ إنهاء التحديد</button>
   </div>
 </div>
 
@@ -712,7 +755,7 @@ body.bulk-on{padding-bottom:130px}
       <button class="btn" data-act="0">مسح</button>
       <button class="btn" id="revBtn" title="تسجيل مراجعة الآيات المحفوظة المحددة اليوم">🔁 تمت المراجعة</button>
       <span style="flex:1"></span>
-      <a class="btn" id="tafsir" target="_blank" rel="noopener">📖 التفسير</a>
+      <button class="btn" id="sTafsir">📖 التفسير</button>
       <button class="btn" id="toReader">افتح في المصحف</button>
       <button class="btn" id="selAll">تحديد الكل</button>
     </div>
