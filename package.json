@@ -1,8 +1,8 @@
 {
-  "name": "quran-map",
-  "productName": "Quran Map",
+  "name": "sahibak-al-quran",
+  "productName": "صاحبك القرآن",
   "version": "1.0.0",
-  "description": "خريطة المصحف: تتبّع حفظك وفهمك وقراءتك ومراجعتك للقرآن الكريم، مع مصحف المدينة (طبعة 1441) والتفسير",
+  "description": "صاحبك القرآن: تتبّع حفظك وفهمك وقراءتك ومراجعتك للقرآن الكريم، مع مصحف المدينة (طبعة 1441) والتفسير",
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
@@ -23,18 +23,29 @@
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "com.elfar.quranmap",
-    "productName": "Quran Map",
+    "appId": "com.elfar.sahibak",
+    "productName": "صاحبك القرآن",
     "copyright": "Mamdouh Elfar",
-    "directories": { "output": "dist", "buildResources": "build" },
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
     "files": [
-      "index.html", "app.js", "data.js", "quran-text.js", "mushaf-1441.js", "tafsir-muyassar.js",
-      "fonts/**/*", "vendor/**/*", "electron/**/*", "package.json"
+      "index.html",
+      "app.js",
+      "data.js",
+      "quran-text.js",
+      "mushaf-1441.js",
+      "tafsir-muyassar.js",
+      "fonts/**/*",
+      "vendor/**/*",
+      "electron/**/*",
+      "package.json"
     ],
     "win": {
       "target": "nsis",
       "icon": "build/icon.png",
-      "artifactName": "Quran-Map-Setup-${version}.${ext}"
+      "artifactName": "Sahibak-Al-Quran-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -42,10 +53,18 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Quran Map",
-      "uninstallDisplayName": "Quran Map",
+      "shortcutName": "صاحبك القرآن",
+      "uninstallDisplayName": "صاحبك القرآن",
       "deleteAppDataOnUninstall": false
     },
-    "publish": [{ "provider": "github", "owner": "MamdouhElfar", "repo": "quran-map", "releaseType": "release" }]
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "MamdouhElfar",
+        "repo": "sahibak-al-quran",
+        "releaseType": "release"
+      }
+    ],
+    "executableName": "Sahibak Al-Quran"
   }
 }

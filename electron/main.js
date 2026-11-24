@@ -1,4 +1,4 @@
-// خريطة المصحف — نسخة سطح المكتب (Electron)
+// صاحبك القرآن — نسخة سطح المكتب (Electron)
 // • الواجهة هي نفسها ملفات الويب في جذر المشروع
 // • البيانات: تُحفظ في localStorage كما في المتصفح، ونسخة منها في ملف data.json داخل AppData
 //   مع نسخة احتياطية تلقائية لكل يوم (آخر ٦٠ يومًا)، فلا تضيع بمسح بيانات أي متصفح
@@ -7,7 +7,7 @@ const { app, BrowserWindow, ipcMain, shell, Menu, nativeTheme } = require('elect
 const path = require('path');
 const fs = require('fs');
 
-const APP_NAME = 'Quran Map';
+const APP_NAME = 'Sahibak Al-Quran';   // اسم مجلد البيانات في AppData (بحروف لاتينية)
 app.setName(APP_NAME);
 // QURAN_DATA_DIR للاختبارات فقط: مجلد بيانات منفصل لا يمسّ بيانات المستخدم
 const USER_DIR = process.env.QURAN_DATA_DIR || path.join(app.getPath('appData'), APP_NAME);
@@ -59,9 +59,9 @@ function writeData(json) {
     fs.renameSync(tmp, DATA_FILE);                      // كتابة ذرّية: الملف إما القديم كاملًا أو الجديد كاملًا
     // نسخة احتياطية واحدة لكل يوم، ويُحتفظ بآخر ٦٠
     fs.mkdirSync(BACKUP_DIR, { recursive: true });
-    const today = path.join(BACKUP_DIR, `quran-map-${dayStamp()}.json`);
+    const today = path.join(BACKUP_DIR, `backup-${dayStamp()}.json`);
     fs.copyFileSync(DATA_FILE, today);
-    const old = fs.readdirSync(BACKUP_DIR).filter(f => /^quran-map-\d{4}-\d\d-\d\d\.json$/.test(f)).sort();
+    const old = fs.readdirSync(BACKUP_DIR).filter(f => /^backup-\d{4}-\d\d-\d\d\.json$/.test(f)).sort();
     old.slice(0, Math.max(0, old.length - 60)).forEach(f => fs.rmSync(path.join(BACKUP_DIR, f), { force: true }));
     return true;
   } catch (e) { logError('data', e && e.stack || e); return false; }
@@ -93,7 +93,7 @@ function setupAutoUpdate() {
 function createWindow() {
   win = new BrowserWindow({
     width: 1360, height: 900, minWidth: 980, minHeight: 680,
-    title: 'خريطة المصحف', show: false, autoHideMenuBar: true,
+    title: 'صاحبك القرآن', show: false, autoHideMenuBar: true,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#131518' : '#f7f4ec',
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false, spellcheck: false,

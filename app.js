@@ -1,4 +1,4 @@
-// خريطة المصحف
+// صاحبك القرآن (كان اسمه «خريطة المصحف»)
 // • لكل آية حالة: bit1 = حفظ، bit2 = فهم (3 = كلاهما) + يوم آخر مراجعة للمحفوظ
 // • سجل القراءة اليومي: { رقم اليوم: [أرقام الصفحات] } + الورد اليومي + موضع الوقوف + بداية الختمة
 const TOTAL = 6236, PAGES_N = 604;
@@ -154,7 +154,7 @@ function load() {
   // القيم التالفة تُحفظ كما هي قبل أن يكتب فوقها أول حفظ، لإمكان إنقاذها يدويًا
   if (Object.keys(bad).length) {
     try { localStorage.setItem(`${KEY}.rescue.${Date.now()}`, JSON.stringify(bad)); } catch (e) {}
-    console.warn('خريطة المصحف: وُجدت بيانات تالفة وحُفظت نسختها الأصلية', Object.keys(bad));
+    console.warn('صاحبك القرآن: وُجدت بيانات تالفة وحُفظت نسختها الأصلية', Object.keys(bad));
   }
 }
 load();
@@ -1471,7 +1471,7 @@ function exportBackup() {
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `quran-map-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `sahibak-al-quran-${new Date().toISOString().slice(0, 10)}.json`;
   a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   backupDay = today(); save(); backupCard();
 }
@@ -1509,7 +1509,7 @@ $('file').onchange = async e => {
   if (!file) return;
   let d = null;
   try { d = parseBackup(JSON.parse(await file.text())); } catch (err) {}
-  if (!d) { alert('هذا الملف ليس نسخة صحيحة من خريطة المصحف، ولم يُغيَّر شيء من بياناتك.'); return; }
+  if (!d) { alert('هذا الملف ليس نسخة صحيحة من «صاحبك القرآن»، ولم يُغيَّر شيء من بياناتك.'); return; }
   let h = 0, fh = 0;
   for (const c of d.state) { if (c & 1) h++; if (c & 2) fh++; }
   const pages = Object.values(d.readLog).reduce((n, p) => n + p.length, 0);

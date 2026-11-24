@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const electron = require('electron');
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'quran-map-smoke-'));
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sahibak-smoke-'));
 // سبع آيات الفاتحة محفوظة ومفهومة، وقراءة صفحة اليوم
 const day = Math.floor((Date.now() - new Date().getTimezoneOffset() * 6e4) / 864e5);
 fs.writeFileSync(path.join(dir, 'data.json'), JSON.stringify({
