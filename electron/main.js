@@ -1,4 +1,4 @@
-// صاحبك القرآن — نسخة سطح المكتب (Electron)
+// صاحبُك القرآن — نسخة سطح المكتب (Electron)
 // • الواجهة هي نفسها ملفات الويب في جذر المشروع
 // • البيانات: تُحفظ في localStorage كما في المتصفح، ونسخة منها في ملف data.json داخل AppData
 //   مع نسخة احتياطية تلقائية لكل يوم (آخر ٦٠ يومًا)، فلا تضيع بمسح بيانات أي متصفح
@@ -23,7 +23,7 @@ const ICON = path.join(__dirname, 'icon.png');
 
 // إعدادات سطح المكتب (منفصلة عن بيانات الورد)
 const CONFIG_FILE = path.join(USER_DIR, 'config.json');
-let config = { autostart: true, trayHintShown: false };
+let config = { autostart: true, keepInTray: true, trayHintShown: false };
 try { config = { ...config, ...JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) }; } catch { /* أول تشغيل */ }
 const saveConfig = () => { try { fs.mkdirSync(USER_DIR, { recursive: true }); fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2)); } catch (e) { logError('config', e); } };
 
@@ -92,17 +92,32 @@ ipcMain.on('log:error', (e, msg) => logError('renderer', msg));
 ipcMain.on('app:version', e => { e.returnValue = app.getVersion(); });
 
 // ---------- التحديث التلقائي (في النسخة المثبّتة فقط) ----------
-let updaterInstall = () => null;
+// حالة التحديث تُعرض في الإعدادات: checking / downloading (مع النسبة) / ready / latest / error / dev
+let updaterInstall = () => null, updaterCheck = () => null;
+let upd = { status: app.isPackaged ? 'idle' : 'dev' };
+const sendUpd = s => { upd = { ...s, at: Date.now() }; if (win) win.webContents.send('update-status', upd); };
 ipcMain.handle('app:install-update', () => updaterInstall());
+ipcMain.handle('update:check', () => updaterCheck());
+ipcMain.on('update:get', e => { e.returnValue = upd; });
 function setupAutoUpdate() {
   if (!app.isPackaged || SMOKE) return;
   let autoUpdater;
   try { ({ autoUpdater } = require('electron-updater')); } catch { return; }
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;           // يُثبَّت بهدوء عند إغلاق التطبيق
-  autoUpdater.on('update-downloaded', i => win && win.webContents.send('update-ready', i.version));
-  autoUpdater.on('error', e => logError('updater', e && e.message || e));
-  const check = () => autoUpdater.checkForUpdates().catch(() => {});
+  let ready = null;
+  autoUpdater.on('checking-for-update', () => { if (!ready) sendUpd({ status: 'checking' }); });
+  autoUpdater.on('update-available', i => sendUpd({ status: 'downloading', version: i.version, percent: 0 }));
+  autoUpdater.on('download-progress', p => sendUpd({ status: 'downloading', version: upd.version, percent: Math.round(p.percent || 0) }));
+  autoUpdater.on('update-not-available', () => { if (!ready) sendUpd({ status: 'latest' }); });
+  autoUpdater.on('update-downloaded', i => {
+    ready = i.version;
+    sendUpd({ status: 'ready', version: i.version });
+    if (win) win.webContents.send('update-ready', i.version);
+  });
+  autoUpdater.on('error', e => { logError('updater', e && e.message || e); if (!ready) sendUpd({ status: 'error' }); });
+  const check = () => { if (upd.status !== 'downloading') autoUpdater.checkForUpdates().catch(() => {}); };
+  updaterCheck = check;
   setTimeout(check, 8000);
   setInterval(check, 60 * 60 * 1000);
   updaterInstall = () => { quitting = true; autoUpdater.quitAndInstall(true, true); };
@@ -115,15 +130,17 @@ function applyAutostart() {
 }
 ipcMain.on('autostart:get', e => { e.returnValue = !!config.autostart; });
 ipcMain.handle('autostart:set', (e, on) => { config.autostart = !!on; saveConfig(); applyAutostart(); return config.autostart; });
+ipcMain.on('tray:get', e => { e.returnValue = config.keepInTray !== false; });
+ipcMain.handle('tray:set', (e, on) => { config.keepInTray = !!on; saveConfig(); return config.keepInTray; });
 
 // ---------- أيقونة بجوار الساعة ----------
 let tray = null;
 function setupTray() {
   if (SMOKE) return;
   tray = new Tray(ICON);
-  tray.setToolTip('صاحبك القرآن');
+  tray.setToolTip('صاحبُك القرآن');
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'فتح صاحبك القرآن', click: showMain },
+    { label: 'فتح صاحبُك القرآن', click: showMain },
     { type: 'separator' },
     { label: 'خروج', click: () => { quitting = true; app.quit(); } },
   ]));
@@ -162,7 +179,7 @@ ipcMain.on('reminder:act', (e, kind, action) => { if (remWin && remWin.__act) re
 function createWindow() {
   win = new BrowserWindow({
     width: 1360, height: 900, minWidth: 980, minHeight: 680,
-    title: 'صاحبك القرآن', show: false, autoHideMenuBar: true,
+    title: 'صاحبُك القرآن', show: false, autoHideMenuBar: true,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#131518' : '#f7f4ec',
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false, spellcheck: false,
@@ -173,12 +190,12 @@ function createWindow() {
   win.once('ready-to-show', () => { if (!SMOKE && !START_HIDDEN) { win.maximize(); win.show(); } });
   // الإغلاق يُخفي النافذة ويُبقي التطبيق يعمل للتنبيهات؛ والخروج من أيقونة الساعة
   win.on('close', e => {
-    if (quitting || SMOKE) return;
+    if (quitting || SMOKE || config.keepInTray === false) { quitting = true; return; }
     e.preventDefault();
     win.hide();
     if (!config.trayHintShown && Notification.isSupported()) {
       config.trayHintShown = true; saveConfig();
-      new Notification({ title: 'صاحبك القرآن يعمل في الخلفية', body: 'ليذكّرك بأورادك في وقتها. للخروج: اضغط بالزر الأيمن على أيقونته بجوار الساعة ثم «خروج».', icon: ICON }).show();
+      new Notification({ title: 'صاحبُك القرآن يعمل في الخلفية', body: 'ليذكّرك بأورادك في وقتها. للخروج: اضغط بالزر الأيمن على أيقونته بجوار الساعة ثم «خروج».', icon: ICON }).show();
     }
   });
   win.webContents.on('render-process-gone', (e, d) => logError('renderer', 'gone: ' + d.reason));

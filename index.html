@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>صاحبك القرآن</title>
+<title>صاحبُك القرآن</title>
 <link href="fonts/ui.css" rel="stylesheet">
 <style>
 :root{
@@ -31,6 +31,7 @@
   --page:#1a1c1f; --frame:#6e5f3a; --bar-low:#3a4a44;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:Tajawal,system-ui,sans-serif}
 .sw{width:10px;height:10px;border-radius:50%;display:inline-block;vertical-align:middle}
 .red{color:var(--red)!important}
@@ -47,7 +48,14 @@ body{padding-right:212px}
 #tabs button{display:flex;align-items:center;gap:10px;border:0;background:none;font:inherit;font-size:15px;color:var(--ink);padding:10px 12px;border-radius:10px;cursor:pointer;text-align:start}
 #tabs button:hover{background:var(--hover)}
 #tabs button.on{background:var(--accent);color:var(--bg);font-weight:700}
-#tabs i{font-style:normal;width:22px;text-align:center}
+#tabs i,#tabs2 i{font-style:normal;width:22px;text-align:center}
+#tabs2{margin-top:auto;border-top:1px solid var(--line);padding-top:10px}
+#tabs2 button{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;font:inherit;font-size:15px;color:var(--ink);padding:10px 12px;border-radius:10px;cursor:pointer;text-align:start}
+#tabs2 button:hover{background:var(--hover)}
+#tabs2 button.on{background:var(--accent);color:var(--bg);font-weight:700}
+.setrow{margin-top:10px;font-size:14px}
+.about-name{font-family:Amiri,serif;font-size:28px;font-weight:700;color:var(--accent)}
+#updProg[hidden]{display:none}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--card)}
 .seg button{border:0;background:none;color:var(--muted);font:inherit;font-size:14px;padding:6px 15px;cursor:pointer;white-space:nowrap}
 .seg button.on{background:var(--accent);color:var(--bg)}
@@ -316,7 +324,7 @@ body.bulk-on{padding-bottom:130px}
 <body>
 <div id="updBar" hidden><span id="updTxt"></span><button class="btn pri" id="updNow">أعد التشغيل وحدِّث الآن</button></div>
 <nav id="side" aria-label="الأقسام">
-  <div class="brand"><img src="electron/icon.png" alt=""><span>صاحبك القرآن</span></div>
+  <div class="brand"><img src="electron/icon.png" alt=""><span>صاحبُك القرآن</span></div>
   <div id="tabs">
     <button data-s="home"><i>🏠</i>الرئيسية</button>
     <button data-s="reader"><i>📖</i>المصحف</button>
@@ -324,6 +332,7 @@ body.bulk-on{padding-bottom:130px}
     <button data-s="mapScreen"><i>🗺️</i>الخريطة</button>
     <button data-s="refs"><i>🔖</i>المرجعيات</button>
   </div>
+  <div id="tabs2"><button data-s="settings"><i>⚙️</i>الإعدادات</button></div>
 </nav>
 
 <!-- ================= الرئيسية ================= -->
@@ -505,17 +514,6 @@ body.bulk-on{padding-bottom:130px}
     </div>
   </div>
 
-  <div class="card wide" id="remCard" hidden>
-    <h3>🔔 تنبيهات الأوراد</h3>
-    <div class="remrows">
-      <label class="remrow"><input type="checkbox" data-rk="read"><span>📖 ورد القراءة</span><input type="time" data-rt="read" aria-label="وقت تنبيه ورد القراءة"></label>
-      <label class="remrow"><input type="checkbox" data-rk="hifz"><span>🧠 ورد الحفظ</span><input type="time" data-rt="hifz" aria-label="وقت تنبيه ورد الحفظ"></label>
-      <label class="remrow"><input type="checkbox" data-rk="rev"><span>🔁 ورد المراجعة</span><input type="time" data-rt="rev" aria-label="وقت تنبيه ورد المراجعة"></label>
-    </div>
-    <div class="muted" style="font-size:13px;margin-top:8px">يظهر التنبيه في وقته إن لم يكتمل الورد بعد، وفيه «ابدأ الآن» و«بعد ١٥ دقيقة» و«ليس اليوم».</div>
-    <label class="row" style="margin-top:10px;font-size:14px"><input type="checkbox" id="autoStart"> شغّل «صاحبك القرآن» مع ويندوز في الخلفية ليصلك التنبيه في وقته</label>
-  </div>
-
   <div class="card wide">
     <div class="rvh">
       <h3>آخر ٣٠ يومًا</h3>
@@ -569,11 +567,7 @@ body.bulk-on{padding-bottom:130px}
     <span>— تمتلئ البطاقة من الأسفل إلى الأعلى بقدر ما أنجزت</span>
   </div>
   <footer>
-    اضغط على أي سورة أو صفحة أو جزء لتسجيل آياتها. ما تسجّله هنا يُعدّ محفوظًا سابقًا؛ أما الحفظ الجديد فسجّله من «خطة اليوم» أو من المصحف ليُحسب في وردك. بياناتك محفوظة على جهازك فقط —
-    <button class="lnk" id="exp">حفظ نسخة احتياطية</button><span id="bkInfo"></span>·<button class="lnk" id="imp">استرجاع نسخة</button>
-    <span id="deskBk" hidden>· تُحفظ نسخة احتياطية تلقائيًا كل يوم — <button class="lnk" id="openBk">فتح مجلدها</button> · <span id="appVer"></span></span>
-    <input type="file" id="file" accept=".json" hidden>
-    <br>نص المصحف من Quran.com · بيانات الصفحات والأجزاء من Tanzil.net · التفسير من Quran.com
+    اضغط على أي سورة أو صفحة أو جزء لتسجيل آياتها. ما تسجّله هنا يُعدّ محفوظًا سابقًا؛ أما الحفظ الجديد فسجّله من «خطة اليوم» أو من المصحف ليُحسب في وردك.
   </footer>
 </section>
 
@@ -592,6 +586,68 @@ body.bulk-on{padding-bottom:130px}
       <span id="rcTools"><button class="lnk" id="rcDel">حذف التصنيف</button></span>
     </div>
     <div id="riList"></div>
+  </div>
+ </div>
+</section>
+
+<!-- ================= الإعدادات ================= -->
+<section class="screen" id="settings">
+ <div class="dash set">
+  <div class="card wide" id="remCard">
+    <h3>🔔 تنبيهات الأوراد</h3>
+    <div class="remrows">
+      <label class="remrow"><input type="checkbox" data-rk="read"><span>📖 ورد القراءة</span><input type="time" data-rt="read" aria-label="وقت تنبيه ورد القراءة"></label>
+      <label class="remrow"><input type="checkbox" data-rk="hifz"><span>🧠 ورد الحفظ</span><input type="time" data-rt="hifz" aria-label="وقت تنبيه ورد الحفظ"></label>
+      <label class="remrow"><input type="checkbox" data-rk="rev"><span>🔁 ورد المراجعة</span><input type="time" data-rt="rev" aria-label="وقت تنبيه ورد المراجعة"></label>
+    </div>
+    <div class="muted" style="font-size:13px;margin-top:8px">يظهر التنبيه في وقته إن لم يكتمل الورد بعد، وفيه «ابدأ الآن» و«بعد ١٥ دقيقة» و«ليس اليوم».</div>
+    <label class="row setrow"><input type="checkbox" id="autoStart"> شغّل «صاحبُك القرآن» مع ويندوز في الخلفية ليصلك التنبيه في وقته</label>
+    <label class="row setrow"><input type="checkbox" id="keepTray"> عند إغلاق النافذة يبقى التطبيق يعمل بجوار الساعة (لازم للتنبيهات والتحديثات)</label>
+  </div>
+
+  <div class="card" id="updCard">
+    <h3>⬆️ التحديثات</h3>
+    <div class="wbig" id="setVer"></div>
+    <div id="updState" style="font-size:14px;margin:6px 0"></div>
+    <div class="prog" id="updProg" hidden><span></span></div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn" id="updCheck">تحقّق من وجود تحديث</button>
+      <button class="btn pri" id="updInstall" hidden>أعد التشغيل وحدِّث الآن</button>
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:8px">يبحث التطبيق عن تحديث عند بدئه ثم كل ساعة، وينزّله في الخلفية، ويُثبَّت عند إغلاقه.</div>
+  </div>
+
+  <div class="card">
+    <h3>📖 المصحف والمظهر</h3>
+    <label class="row setrow">شكل المصحف:
+      <select id="mStyle">
+        <option value="m1441">مصحف المدينة، طبعة ١٤٤١ (صفحات مطابقة للمطبوع)</option>
+        <option value="plain">نص متصل بخط أميري (يكبر الخط بحرية)</option>
+      </select></label>
+    <label class="row setrow">المظهر:
+      <select id="themeSel"><option value="auto">تلقائي (حسب ويندوز)</option><option value="light">فاتح</option><option value="dark">داكن</option></select></label>
+    <div class="muted" style="font-size:12px;margin-top:6px">حجم الصفحة من زرّي «أ −» و«أ +» فوق المصحف.</div>
+  </div>
+
+  <div class="card">
+    <h3>💾 البيانات</h3>
+    <div style="font-size:14px;line-height:1.9">بياناتك محفوظة على جهازك فقط<span id="deskBk" hidden>، وتُحفظ نسخة احتياطية تلقائيًا كل يوم</span>.</div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn" id="exp">حفظ نسخة احتياطية</button>
+      <button class="btn" id="imp">استرجاع نسخة</button>
+      <button class="btn" id="openBk" hidden>فتح مجلد النسخ التلقائية</button>
+    </div>
+    <div class="muted" id="bkInfo" style="font-size:12px;margin-top:6px"></div>
+    <input type="file" id="file" accept=".json" hidden>
+  </div>
+
+  <div class="card">
+    <h3>ℹ️ عن التطبيق</h3>
+    <div class="about-name">صاحبُك القرآن</div>
+    <div style="font-size:14px;line-height:1.9">سُمّي التطبيق من حديث النبي ﷺ عن القرآن يأتي صاحبَه فيقول له: «أنا صاحبُك القرآن».</div>
+    <div class="muted" id="appVer" style="font-size:13px;margin-top:6px"></div>
+    <div class="muted" style="font-size:12px;line-height:1.9;margin-top:8px">نص المصحف وتخطيط صفحاته والتفاسير من Quran.com · خطوط صفحات المصحف من مجمع الملك فهد لطباعة المصحف الشريف · بيانات السور والأجزاء من Tanzil.net · خطوط الواجهة Amiri وTajawal (OFL) · تقليب الصفحات StPageFlip (MIT)</div>
+    <a class="lnk" href="https://github.com/MamdouhElfar/sahibak-al-quran" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px">صفحة التطبيق على GitHub</a>
   </div>
  </div>
 </section>

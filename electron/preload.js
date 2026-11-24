@@ -16,4 +16,10 @@ contextBridge.exposeInMainWorld('qmDesktop', {
   reminderAct: (kind, action) => ipcRenderer.send('reminder:act', kind, action),   // من نافذة التنبيه نفسها
   getAutostart: () => ipcRenderer.sendSync('autostart:get'),
   setAutostart: on => ipcRenderer.invoke('autostart:set', on),
+  getKeepInTray: () => ipcRenderer.sendSync('tray:get'),
+  setKeepInTray: on => ipcRenderer.invoke('tray:set', on),
+  // التحديثات
+  getUpdate: () => ipcRenderer.sendSync('update:get'),
+  checkUpdate: () => ipcRenderer.invoke('update:check'),
+  onUpdateStatus: cb => ipcRenderer.on('update-status', (e, s) => cb(s)),
 });

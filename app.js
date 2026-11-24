@@ -1,4 +1,4 @@
-// صاحبك القرآن (كان اسمه «خريطة المصحف»)
+// صاحبُك القرآن (كان اسمه «خريطة المصحف»)
 // • لكل آية حالة: bit1 = حفظ، bit2 = فهم (3 = كلاهما) + يوم آخر مراجعة للمحفوظ
 // • سجل القراءة اليومي: { رقم اليوم: [أرقام الصفحات] } + الورد اليومي + موضع الوقوف + بداية الختمة
 const TOTAL = 6236, PAGES_N = 604;
@@ -178,7 +178,7 @@ function load() {
   // القيم التالفة تُحفظ كما هي قبل أن يكتب فوقها أول حفظ، لإمكان إنقاذها يدويًا
   if (Object.keys(bad).length) {
     try { localStorage.setItem(`${KEY}.rescue.${Date.now()}`, JSON.stringify(bad)); } catch (e) {}
-    console.warn('صاحبك القرآن: وُجدت بيانات تالفة وحُفظت نسختها الأصلية', Object.keys(bad));
+    console.warn('صاحبُك القرآن: وُجدت بيانات تالفة وحُفظت نسختها الأصلية', Object.keys(bad));
   }
 }
 load();
@@ -510,6 +510,10 @@ $('fsDown').onclick = () => setFs(-2);
 // ---------- رسم مصحف المدينة (طبعة 1441) سطرًا بسطر بخطوط مجمع الملك فهد (QPC V2) ----------
 // لكل صفحة خط خاص يُحمَّل من مجلد التطبيق عند فتحها؛ وإن تعذّر التحميل يُعرض النص العادي
 const HAS_M = typeof M1441 !== 'undefined';
+// شكل المصحف من الإعدادات: m1441 (صفحات مطابقة للمطبوع) أو plain (نص متصل بخط أميري)
+let mStyle = 'm1441';
+try { mStyle = localStorage.getItem(KEY + '.mstyle') === 'plain' ? 'plain' : 'm1441'; } catch (e) {}
+const useQcf = () => HAS_M && mStyle === 'm1441';
 const QCF_URL = p => `fonts/qcf/p${p}.woff2`;   // مضمّنة في التطبيق (tools/fetch_fonts.py)
 const qcfLoads = {};
 function loadQcf(p) {
@@ -564,7 +568,7 @@ let drawSeq = 0;
 async function drawText(p) {
   const seq = ++drawSeq, el = $('mtext'), [f, t] = pageB[p - 1], hifzSet = new Set(hifzToday);
   let ok = false;
-  if (HAS_M) {
+  if (useQcf()) {
     if (!qcfLoads[p]) el.classList.add('loading');
     ok = (await Promise.all([loadQcf(p), loadQcf(1)])).every(Boolean);
     if (seq !== drawSeq) return;        // انتقل المستخدم إلى صفحة أخرى أثناء التحميل
@@ -594,10 +598,11 @@ const idxOf = p => PAGES_N - p, pageAt = i => PAGES_N - i;
 // تُستخدم المكتبة في العرض المزدوج فقط (الشاشات العريضة)؛ فالتقليب للخلف لا يعمل فيها في وضع الصفحة الواحدة.
 // وعلى الشاشات الضيقة صفحة واحدة بحركة تقليب بسيطة وسحب بالإصبع في الاتجاهين
 let book = null, bookEls = [], bookOn = false;
+const wantBook = () => FLIP && useQcf() && wideEnough();   // الكتاب المزدوج لطبعة المدينة على الشاشات العريضة
 const wideEnough = () => $('reader').clientWidth - ($('reader').classList.contains('tf-open') ? 408 : 0) >= 680;
 // بعد تغيّر المساحة المتاحة (لوحة التفسير): بدّل الوضع إن لزم، وإلا أعِد حساب مقاس الكتاب
 function relayoutReader() {
-  if (screen === 'reader' && FLIP && wideEnough() !== bookOn) renderPage();
+  if (screen === 'reader' && FLIP && wantBook() !== bookOn) renderPage();
   else window.dispatchEvent(new Event('resize'));
 }
 const filled = new Map();   // رقم الصفحة ← نسخة الرسم التي رُسمت بها
@@ -713,7 +718,7 @@ function setBookMode(on) {
   else { $('mpNum').before($('readSt')); $('mpNum').after($('mpToday')); }   // في تذييل الصفحة
 }
 function renderPage() {
-  if (FLIP && screen === 'reader' && wideEnough()) {
+  if (screen === 'reader' && wantBook()) {
     if (!book) initBook();
     else {
       if (!bookOn) setBookMode(true);
@@ -821,7 +826,7 @@ addEventListener('resize', e => {
   if (!e.isTrusted || screen !== 'reader' || !FLIP) return;
   if (book) sizeBook();   // يسبق معالج المكتبة لأنه سُجّل قبلها
   clearTimeout(rzT);
-  rzT = setTimeout(() => { if (wideEnough() !== bookOn) renderPage(); }, 150);
+  rzT = setTimeout(() => { if (wantBook() !== bookOn) renderPage(); }, 150);
 });
 $('pgNext').onclick = () => turn(1);
 $('pgPrev').onclick = () => turn(-1);
@@ -1718,7 +1723,6 @@ if (DESK) {
   setTimeout(checkReminders, 5000);
   setInterval(checkReminders, 30000);
   // الإعدادات في شاشة الورد
-  $('remCard').hidden = false;
   const drawRem = () => {
     document.querySelectorAll('[data-rk]').forEach(c => { c.checked = remind[c.dataset.rk].on; });
     document.querySelectorAll('[data-rt]').forEach(i => { i.value = remind[i.dataset.rt].time; i.disabled = !remind[i.dataset.rt].on; });
@@ -1736,6 +1740,8 @@ if (DESK) {
     save(); drawRem();
   });
   $('autoStart').checked = DESK.getAutostart();
+  $('keepTray').checked = DESK.getKeepInTray();
+  $('keepTray').onchange = e => DESK.setKeepInTray(e.target.checked);
 }
 
 // ======================================================================
@@ -1747,7 +1753,7 @@ function showScreen(s) {
   screen = s;
   try { localStorage.setItem(KEY + '.screen', s); } catch (e) {}
   document.querySelectorAll('.screen').forEach(el => el.classList.toggle('on', el.id === s));
-  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.s === s));
+  document.querySelectorAll('#tabs button, #tabs2 button').forEach(b => b.classList.toggle('on', b.dataset.s === s));
   if (s !== 'mapScreen') setPicking(false);
   tip.style.display = 'none';
   if (s === 'reader') renderPage();
@@ -1755,6 +1761,7 @@ function showScreen(s) {
   if (s === 'wird') wirdScreen();
   if (s === 'home') dashboard();
   if (s === 'refs') refsScreen();
+  if (s === 'settings') settingsScreen();
   scrollTo(0, 0);
 }
 $('tabs').addEventListener('click', e => {
@@ -1763,6 +1770,7 @@ $('tabs').addEventListener('click', e => {
   if (b.dataset.s === 'reader' && readerMode !== 'read') { readerMode = 'read'; page = lastPage; }
   showScreen(b.dataset.s);
 });
+$('tabs2').addEventListener('click', e => { const b = e.target.closest('button'); if (b) showScreen(b.dataset.s); });
 document.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => showScreen(b.dataset.goto));
 
 function refreshAll() {
@@ -1819,7 +1827,7 @@ $('file').onchange = async e => {
   if (!file) return;
   let d = null;
   try { d = parseBackup(JSON.parse(await file.text())); } catch (err) {}
-  if (!d) { alert('هذا الملف ليس نسخة صحيحة من «صاحبك القرآن»، ولم يُغيَّر شيء من بياناتك.'); return; }
+  if (!d) { alert('هذا الملف ليس نسخة صحيحة من «صاحبُك القرآن»، ولم يُغيَّر شيء من بياناتك.'); return; }
   let h = 0, fh = 0;
   for (const c of d.state) { if (c & 1) h++; if (c & 2) fh++; }
   const pages = Object.values(d.readLog).reduce((n, p) => n + p.length, 0);
@@ -1876,6 +1884,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) chec
 // ---------- سطح المكتب: النسخ التلقائية والتحديثات ----------
 if (DESK) {
   $('deskBk').hidden = false;
+  $('openBk').hidden = false;
   $('openBk').onclick = () => DESK.openBackups();
   $('appVer').textContent = `الإصدار ${DESK.version}`;
   DESK.onUpdateReady(v => {
@@ -1888,4 +1897,56 @@ if (DESK) {
 setPicking(false);
 renderMap();
 backupCard();
-showScreen(['home', 'reader', 'wird', 'mapScreen', 'refs'].includes(screen) ? screen : 'home');
+// ======================================================================
+//  الإعدادات
+// ======================================================================
+let theme = 'auto';
+try { theme = ['light', 'dark'].includes(localStorage.getItem(KEY + '.theme')) ? localStorage.getItem(KEY + '.theme') : 'auto'; } catch (e) {}
+function applyTheme() {
+  if (theme === 'auto') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = theme;
+}
+applyTheme();
+const UPD_TXT = {
+  dev: () => 'نسخة تطوير: التحديث التلقائي يعمل في النسخة المثبّتة فقط.',
+  idle: () => 'لم يُبحث عن تحديث بعد.',
+  checking: () => 'جارٍ البحث عن تحديث…',
+  latest: () => 'لديك أحدث إصدار ✓',
+  error: () => 'تعذّر البحث عن تحديث؛ تحقّق من الاتصال بالإنترنت ثم أعد المحاولة.',
+  downloading: u => `جارٍ تنزيل الإصدار ${u.version || ''} في الخلفية… ${ar(u.percent || 0)}٪`,
+  ready: u => `الإصدار ${u.version} جاهز ✓ ويُثبَّت عند إغلاق التطبيق، أو الآن من الزر.`,
+};
+function drawUpd(u) {
+  $('updState').textContent = (UPD_TXT[u.status] || UPD_TXT.idle)(u);
+  $('updProg').hidden = u.status !== 'downloading';
+  $('updProg').firstElementChild.style.width = (u.percent || 0) + '%';
+  $('updInstall').hidden = u.status !== 'ready';
+  $('updCheck').disabled = ['checking', 'downloading', 'dev'].includes(u.status);
+}
+function settingsScreen() {
+  $('mStyle').value = mStyle;
+  $('themeSel').value = theme;
+  if (DESK) { $('setVer').textContent = `الإصدار ${DESK.version}`; drawUpd(DESK.getUpdate()); }
+  else {
+    $('setVer').textContent = 'نسخة المتصفح';
+    $('updState').textContent = 'التحديثات التلقائية في تطبيق سطح المكتب.';
+    $('updCheck').disabled = true;
+    $('remCard').querySelectorAll('input').forEach(i => { i.disabled = true; });
+  }
+}
+$('mStyle').onchange = e => {
+  mStyle = e.target.value;
+  try { localStorage.setItem(KEY + '.mstyle', mStyle); } catch (err) {} deskSave();
+};
+$('themeSel').onchange = e => {
+  theme = e.target.value;
+  try { localStorage.setItem(KEY + '.theme', theme); } catch (err) {} deskSave();
+  applyTheme();
+};
+if (DESK) {
+  DESK.onUpdateStatus(u => { if (screen === 'settings') drawUpd(u); });
+  $('updCheck').onclick = () => { DESK.checkUpdate(); drawUpd({ status: 'checking' }); };
+  $('updInstall').onclick = () => $('updNow').click();
+}
+
+showScreen(['home', 'reader', 'wird', 'mapScreen', 'refs', 'settings'].includes(screen) ? screen : 'home');

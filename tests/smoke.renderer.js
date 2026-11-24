@@ -36,6 +36,16 @@
     const pw = $('map').getBoundingClientRect().width; view = 'suras'; renderMap();
     checks['عرض الصفحات بعرض الخريطة'] = Math.abs(pw - $('map').getBoundingClientRect().width) < 2;
 
+    // الإعدادات: الإصدار وحالة التحديث، وشكل المصحف «نص متصل»
+    showScreen('settings'); await wait(200);
+    checks['الإعدادات تعرض الإصدار والتحديث'] = $('setVer').textContent.includes(qmDesktop.version) && $('updState').textContent.length > 5;
+    $('mStyle').value = 'plain'; $('mStyle').dispatchEvent(new Event('change'));
+    openReader(50); await wait(600);
+    checks['شكل «نص متصل» يعرض صفحة واحدة بخط أميري'] = !bookOn && $('mtext').querySelectorAll('.ay').length > 0;
+    $('mStyle').value = 'm1441'; $('mStyle').dispatchEvent(new Event('change'));
+    openReader(77); await wait(1200);
+    checks['العودة إلى مصحف المدينة'] = bookOn;
+
     // الحفظ في الملف
     applyAct([start[114]], 1); save(); await wait(900);
     const file = qmDesktop.readData();
