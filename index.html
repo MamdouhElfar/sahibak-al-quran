@@ -86,6 +86,15 @@ input[type=number]{width:70px}
 .wbig{font-size:30px;font-weight:700}
 .wbig small{font-size:15px;color:var(--muted);font-weight:500}
 .done-msg{color:var(--accent);font-weight:700}
+.prow2{padding:12px 0;border-top:1px solid var(--line)}
+.plan h3+.prow2{border-top:0;padding-top:2px}
+.ph{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:15px}
+.ph .pv{font-size:14px;color:var(--muted)}
+.ph .pv b{font-size:18px;color:var(--ink)}
+.prow2 .prog{margin:6px 0}
+.pd{font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:8px}
+.pd .tgt{font-family:Amiri,serif;font-size:16px;color:var(--ink)}
+.prow2.done .row{display:none}
 .bkcard{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-inline-start:4px solid var(--both);background:color-mix(in srgb,var(--both) 8%,var(--card))}
 .bkcard[hidden]{display:none}
 .bktx{flex:1;min-width:220px;display:flex;flex-direction:column;gap:4px;font-size:14px}
@@ -229,10 +238,26 @@ body.bulk-on{padding-bottom:130px}
     <table class="plegend" id="plegend"></table>
   </div>
 
-  <div class="card">
-    <h3>📖 ورد اليوم</h3>
-    <div id="hWird"></div>
-    <button class="btn go pri" id="hContinue"></button>
+  <div class="card plan">
+    <h3>خطة اليوم</h3>
+    <div class="prow2" id="planRead">
+      <div class="ph"><b>📖 القراءة</b><span class="pv"></span></div>
+      <div class="prog"><span></span></div>
+      <div class="pd"></div>
+      <div class="row"><button class="btn pri" id="hContinue"></button></div>
+    </div>
+    <div class="prow2" id="planHifz">
+      <div class="ph"><b>🧠 الحفظ الجديد</b><span class="pv"></span></div>
+      <div class="prog"><span style="background:var(--hifz)"></span></div>
+      <div class="pd"></div>
+      <div class="row"><button class="btn" id="hHifzOpen">افتح في المصحف</button><button class="btn pri" id="hHifzDone">حفظتُها ✓</button></div>
+    </div>
+    <div class="prow2" id="planRev">
+      <div class="ph"><b>🔁 المراجعة</b><span class="pv"></span></div>
+      <div class="prog"><span style="background:var(--both)"></span></div>
+      <div class="pd"></div>
+      <div class="row"><button class="btn" id="hRevOpen">افتح في المصحف</button><button class="btn pri" id="hRevDone">راجعتُها ✓</button></div>
+    </div>
   </div>
 
   <div class="card">
@@ -244,16 +269,9 @@ body.bulk-on{padding-bottom:130px}
 
   <div class="card" id="review">
     <div class="rvh">
-      <h3>🔁 المراجعة</h3>
+      <h3>🔁 ما يحتاج إلى مراجعة</h3>
       <span class="sum" id="rvSummary"></span>
-      <label for="cycle">دورة المراجعة:</label>
-      <select id="cycle">
-        <option value="3">٣ أيام</option>
-        <option value="7">أسبوع</option>
-        <option value="14">أسبوعان</option>
-        <option value="30">شهر</option>
-        <option value="60">شهران</option>
-      </select>
+      <button class="lnk" data-goto="wird">إعدادات المراجعة</button>
     </div>
     <div id="rvList"></div>
   </div>
@@ -291,7 +309,7 @@ body.bulk-on{padding-bottom:130px}
 <section class="screen" id="wird">
  <div class="dash">
   <div class="card">
-    <h3>اليوم</h3>
+    <h3>📖 ورد القراءة</h3>
     <div id="wToday"></div>
     <div class="row" style="margin-top:12px">
       <label for="wirdSel" class="muted" style="font-size:14px">وردك اليومي:</label>
@@ -318,10 +336,58 @@ body.bulk-on{padding-bottom:130px}
     </div>
   </div>
 
+  <div class="card">
+    <h3>🧠 ورد الحفظ</h3>
+    <div id="wHifz"></div>
+    <div class="row" style="margin-top:12px">
+      <label for="hGoalSel" class="muted" style="font-size:14px">الحفظ الجديد يوميًا:</label>
+      <select id="hGoalSel">
+        <option value="1">آية واحدة</option>
+        <option value="2">آيتان</option>
+        <option value="3">٣ آيات</option>
+        <option value="5">٥ آيات</option>
+        <option value="7">٧ آيات</option>
+        <option value="10">١٠ آيات</option>
+        <option value="15">١٥ آية (نحو صفحة)</option>
+        <option value="20">٢٠ آية</option>
+      </select>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <label for="hDirSel" class="muted" style="font-size:14px">ترتيب الحفظ:</label>
+      <select id="hDirSel">
+        <option value="b">من الناس إلى البقرة (جزء عمّ أولًا)</option>
+        <option value="f">من الفاتحة إلى الناس</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>🔁 ورد المراجعة</h3>
+    <div id="wRev"></div>
+    <div class="row" style="margin-top:12px">
+      <label for="cycle" class="muted" style="font-size:14px">راجع محفوظك كله مرة كل:</label>
+      <select id="cycle">
+        <option value="3">٣ أيام</option>
+        <option value="7">أسبوع</option>
+        <option value="14">أسبوعين</option>
+        <option value="30">شهر</option>
+        <option value="60">شهرين</option>
+      </select>
+    </div>
+  </div>
+
   <div class="card wide">
-    <h3>آخر ٣٠ يومًا</h3>
-    <div class="kpis four" id="wKpis"></div>
-    <svg id="chart" viewBox="0 0 640 230" role="img" aria-label="عدد الصفحات المقروءة في كل يوم خلال آخر ثلاثين يومًا"></svg>
+    <div class="rvh">
+      <h3>آخر ٣٠ يومًا</h3>
+      <span style="flex:1"></span>
+      <div class="seg" id="metricSeg">
+        <button data-m="read">القراءة</button>
+        <button data-m="hifz">الحفظ</button>
+        <button data-m="rev">المراجعة</button>
+      </div>
+    </div>
+    <div class="kpis four" id="wKpis" style="margin-top:12px"></div>
+    <svg id="chart" viewBox="0 0 640 230" role="img" aria-label="الإنجاز اليومي خلال آخر ثلاثين يومًا"></svg>
     <div class="clegend">
       <span><i style="background:var(--accent)"></i>أتممتَ الورد</span>
       <span><i style="background:var(--bar-low)"></i>دون الورد</span>
@@ -363,7 +429,7 @@ body.bulk-on{padding-bottom:130px}
     <span>— تمتلئ البطاقة من الأسفل إلى الأعلى بقدر ما أنجزت</span>
   </div>
   <footer>
-    اضغط على أي سورة أو صفحة أو جزء لتسجيل آياتها. بياناتك محفوظة على جهازك فقط —
+    اضغط على أي سورة أو صفحة أو جزء لتسجيل آياتها. ما تسجّله هنا يُعدّ محفوظًا سابقًا؛ أما الحفظ الجديد فسجّله من «خطة اليوم» أو من المصحف ليُحسب في وردك. بياناتك محفوظة على جهازك فقط —
     <button class="lnk" id="exp">حفظ نسخة احتياطية</button><span id="bkInfo"></span>·<button class="lnk" id="imp">استرجاع نسخة</button>
     <input type="file" id="file" accept=".json" hidden>
     <br>نص المصحف من Quran.com · بيانات الصفحات والأجزاء من Tanzil.net · التفسير من Quran.com

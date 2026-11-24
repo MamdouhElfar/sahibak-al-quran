@@ -51,9 +51,15 @@ const state = new Uint8Array(TOTAL);
 const rev = new Int32Array(TOTAL);
 let cycle = 14, readLog = {}, wird = 5, lastPage = 1, khatmaStart = today(), fontSize = 26;
 let backupDay = 0, backupSnooze = 0;   // يوم آخر نسخة احتياطية، ويوم تأجيل التذكير
+// ورد الحفظ والمراجعة
+let hifzLog = {};   // { رقم اليوم: [أرقام الآيات التي حُفظت جديدًا فيه] }
+let revLog = {};    // { رقم اليوم: عدد الآيات التي رُوجعت فيه }
+let hGoal = 5;      // آيات الحفظ الجديد يوميًا
+let hDir = 'b';     // 'b': من الناس إلى البقرة (جزء عمّ أولًا)، 'f': من الفاتحة إلى الناس
 
 // ---------- التحقق من صحة البيانات (للتحميل والاسترجاع) ----------
-const CYCLES = [3, 7, 14, 30, 60], WIRDS = [1, 2, 3, 4, 5, 10, 20, 40];
+const CYCLES = [3, 7, 14, 30, 60], WIRDS = [1, 2, 3, 4, 5, 10, 20, 40], HGOALS = [1, 2, 3, 5, 7, 10, 15, 20];
+const cleanDir = v => v === 'b' || v === 'f' ? v : null;
 const int = (v, min, max) => { const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v; return Number.isInteger(n) && n >= min && n <= max ? n : null; };
 const day = v => int(v, 1, today() + 1);          // +1: نسخة من جهاز في منطقة زمنية متقدّمة
 const oneOf = list => v => { const n = int(v, 0, 1e9); return list.includes(n) ? n : null; };
@@ -69,6 +75,22 @@ function cleanLog(o) {   // يُسقط الأيام أو الصفحات غير �
     const ps = [...new Set(o[k].map(p => int(p, 1, PAGES_N)).filter(p => p !== null))];
     if (ps.length) out[+k] = ps;
   }
+  return out;
+}
+function cleanHLog(o) {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+  const out = {};
+  for (const k in o) {
+    if (day(k) === null || !Array.isArray(o[k])) continue;
+    const ids = [...new Set(o[k].map(i => int(i, 0, TOTAL - 1)).filter(i => i !== null))];
+    if (ids.length) out[+k] = ids;
+  }
+  return out;
+}
+function cleanRLog(o) {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+  const out = {};
+  for (const k in o) { const n = int(o[k], 1, 1e6); if (day(k) !== null && n) out[+k] = n; }
   return out;
 }
 
@@ -97,6 +119,10 @@ function load() {
   fontSize = read('.fs', str, v => int(v, 18, 40)) ?? 26;
   backupDay = read('.bk', str, day) ?? 0;
   backupSnooze = read('.bkLater', str, day) ?? 0;
+  hifzLog = read('.hlog', json, cleanHLog) ?? {};
+  revLog = read('.rlog', json, cleanRLog) ?? {};
+  hGoal = read('.hgoal', str, oneOf(HGOALS)) ?? 5;
+  hDir = read('.hdir', str, cleanDir) ?? 'b';
   const t = today();
   for (let i = 0; i < TOTAL; i++) if ((state[i] & 1) && !rev[i]) rev[i] = t;
   // القيم التالفة تُحفظ كما هي قبل أن يكتب فوقها أول حفظ، لإمكان إنقاذها يدويًا
@@ -120,6 +146,10 @@ function save() {
     localStorage.setItem(KEY + '.fs', fontSize);
     localStorage.setItem(KEY + '.bk', backupDay);
     localStorage.setItem(KEY + '.bkLater', backupSnooze);
+    localStorage.setItem(KEY + '.hlog', JSON.stringify(hifzLog));
+    localStorage.setItem(KEY + '.rlog', JSON.stringify(revLog));
+    localStorage.setItem(KEY + '.hgoal', hGoal);
+    localStorage.setItem(KEY + '.hdir', hDir);
   } catch (e) {
     if (saveFailWarned) return;
     saveFailWarned = true;
@@ -131,7 +161,7 @@ function save() {
     navigator.storage.persisted().then(p => p || navigator.storage.persist()).catch(() => {});
   }
 }
-const hasData = () => state.some(x => x) || Object.keys(readLog).length > 0;
+const hasData = () => state.some(x => x) || Object.keys(readLog).length > 0 || Object.keys(revLog).length > 0;
 
 const isDue = i => (state[i] & 1) && today() - rev[i] >= cycle;
 
@@ -159,11 +189,92 @@ function khatmaPages() {
   for (const d in readLog) if (+d >= khatmaStart) readLog[d].forEach(p => s.add(p));
   return s;
 }
-function streak() {
+// ---------- مقاييس الورد الثلاثة ----------
+const hifzCount = d => (hifzLog[d] || []).length;
+const revCount = d => revLog[d] || 0;
+function revQuota() {   // ما يلزم مراجعته يوميًا ليُراجَع المحفوظ كله مرة في كل دورة
+  let h = 0;
+  for (let i = 0; i < TOTAL; i++) h += state[i] & 1;
+  return h ? Math.ceil(h / cycle) : 0;
+}
+const METRICS = {
+  read: { n: readCount, goal: () => wird, unit: safahat, name: 'القراءة' },
+  hifz: { n: hifzCount, goal: () => hGoal, unit: ayat, name: 'الحفظ' },
+  rev:  { n: revCount, goal: revQuota, unit: ayat, name: 'المراجعة' },
+};
+function streakOf(m, goal = m.goal()) {
+  if (!goal) return 0;
   let d = today(), n = 0;
-  if (readCount(d) < wird) d--;           // اليوم لم يكتمل بعد؛ السلسلة ما زالت قائمة من أمس
-  while (readCount(d) >= wird) { n++; d--; }
+  if (m.n(d) < goal) d--;           // اليوم لم يكتمل بعد؛ السلسلة ما زالت قائمة من أمس
+  while (m.n(d) >= goal) { n++; d--; }
   return n;
+}
+const streak = () => streakOf(METRICS.read);
+
+// ---------- موضع الحفظ ومقدار اليوم ----------
+// ترتيب الحفظ: السور تنازليًا أو تصاعديًا، والآيات داخل السورة تصاعديًا دائمًا
+function* hifzOrder() {
+  for (let k = 0; k < 114; k++) {
+    const s = hDir === 'b' ? 114 - k : k + 1;
+    for (let i = start[s], e = i + SURAS[s - 1][1]; i < e; i++) yield i;
+  }
+}
+function nextHifz(n) {     // أول n آيات لم تُحفظ بعد بترتيب الحفظ
+  const out = [];
+  if (n <= 0) return out;
+  for (const i of hifzOrder()) if (!(state[i] & 1)) { out.push(i); if (out.length >= n) break; }
+  return out;
+}
+// يصف مجموعة آيات بنطاقات متصلة: «الملك ٢٨–٣٠ · القلم ١–٢»
+function describeAyat(ids) {
+  const parts = [];
+  let a = null, b = null;
+  const flush = () => {
+    if (a === null) return;
+    const s = SURAS[suraOf[a] - 1][0];
+    parts.push(a === b ? `${s} ${ar(ayahOf(a))}` : `${s} ${ar(ayahOf(a))}–${ar(ayahOf(b))}`);
+  };
+  ids.forEach(i => {
+    if (a !== null && i === b + 1 && suraOf[i] === suraOf[a]) b = i;
+    else { flush(); a = b = i; }
+  });
+  flush();
+  return parts.length > 3 ? parts.slice(0, 3).join(' · ') + ' …' : parts.join(' · ');
+}
+// الصفحات التي فيها أقدم الآيات المستحقة للمراجعة، بقدر ما بقي من مقدار اليوم
+function reviewPortion() {
+  const left = revQuota() - revCount(today());
+  if (left <= 0) return [];
+  const due = [];
+  for (let i = 0; i < TOTAL; i++) if (isDue(i)) due.push(i);
+  due.sort((x, y) => rev[x] - rev[y] || x - y);
+  const pages = new Set();
+  let n = 0;
+  for (const i of due) {
+    if (pages.has(pageOf[i])) continue;
+    pages.add(pageOf[i]);
+    const [f, t] = pageB[pageOf[i] - 1];
+    for (let j = f; j <= t; j++) if (isDue(j)) n++;
+    if (n >= left) break;
+  }
+  return [...pages].sort((x, y) => x - y);
+}
+function describePages(ps) {
+  const parts = [];
+  for (let k = 0; k < ps.length; k++) {
+    let e = k;
+    while (e + 1 < ps.length && ps[e + 1] === ps[e] + 1) e++;
+    parts.push(k === e ? ar(ps[k]) : `${ar(ps[k])}–${ar(ps[e])}`);
+    k = e;
+  }
+  const s = parts.length > 4 ? parts.slice(0, 4).join('، ') + ' …' : parts.join('، ');
+  return `${ps.length === 1 ? 'صفحة' : 'الصفحات'} ${s}`;
+}
+const pageAyat = ps => ps.flatMap(p => { const [f, t] = pageB[p - 1], r = []; for (let i = f; i <= t; i++) r.push(i); return r; });
+function duration(d) {
+  if (d <= 60) return ayyamN(d);
+  if (d <= 730) return plural(Math.round(d / 30), 'شهر واحد', 'شهران', 'أشهر', 'شهرًا');
+  return `${ar(+(d / 365).toFixed(1))} سنة`;
 }
 
 // ======================================================================
@@ -216,15 +327,60 @@ function dashboard() {
     act.innerHTML = `آخر حفظ أو مراجعة: <b>${ayyam(gapDays)}</b>`;
   }
 
-  // ورد اليوم
-  const n = readCount(today()), p = Math.min(1, n / wird);
-  $('hWird').innerHTML =
-    `<div class="wbig">${ar(n)} <small>من ${safahat(wird)}</small></div>` +
-    `<div class="prog"><span style="width:${p * 100}%"></span></div>` +
-    `<div style="font-size:14px">${n >= wird ? '<span class="done-msg">أتممتَ وردك اليوم ✓ تقبّل الله منك</span>' : `بقي ${safahat(wird - n)} لإتمام الورد`}` +
-    ` · <span class="muted">الأيام المتتالية: ${ar(streak())}</span></div>`;
-  $('hContinue').textContent = `متابعة القراءة من صفحة ${ar(lastPage)}`;
+  planCard();
 }
+
+// ---------- خطة اليوم: القراءة والحفظ والمراجعة ----------
+let hifzToday = [], revToday = [];
+function planRow(id, m, goal, detail, done) {
+  const el = $(id), n = m.n(today());
+  el.querySelector('.pv').innerHTML = goal ? `<b>${ar(n)}</b> / ${m.unit(goal)}` : '';
+  el.querySelector('.prog span').style.width = (goal ? Math.min(1, n / goal) * 100 : 0) + '%';
+  el.querySelector('.pd').innerHTML = detail;
+  el.classList.toggle('done', !!done);
+}
+function planCard() {
+  const t = today(), all = count(0, TOTAL - 1);
+
+  // القراءة
+  const rn = readCount(t), rs = streak();
+  planRow('planRead', METRICS.read, wird,
+    (rn >= wird ? '<span class="done-msg">أتممتَ ورد القراءة ✓</span>' : `بقي ${safahat(wird - rn)}`) +
+    (rs ? ` · الأيام المتتالية: ${ar(rs)}` : ''));
+  $('hContinue').textContent = `متابعة القراءة من صفحة ${ar(lastPage)}`;
+
+  // الحفظ الجديد
+  const hn = hifzCount(t), hs = streakOf(METRICS.hifz), left = TOTAL - all.h;
+  hifzToday = nextHifz(hGoal - hn);
+  let hd;
+  if (!left) hd = '<span class="done-msg">🎉 أتممتَ حفظ القرآن الكريم، تقبّل الله منك</span>';
+  else if (!hifzToday.length) {
+    const nx = nextHifz(1)[0];
+    hd = `<span class="done-msg">أتممتَ ورد الحفظ ✓</span> · غدًا من ${describeAyat([nx])}`;
+  } else hd = `ورد اليوم: <span class="tgt">${describeAyat(hifzToday)}</span>`;
+  if (left) hd += `<br>بهذا المقدار تُتمّ حفظ القرآن خلال ${duration(Math.ceil(left / hGoal))} تقريبًا` + (hs ? ` · الأيام المتتالية: ${ar(hs)}` : '');
+  planRow('planHifz', METRICS.hifz, hGoal, hd, !hifzToday.length);
+
+  // المراجعة
+  const q = revQuota(), vn = revCount(t);
+  revToday = reviewPortion();
+  let vd;
+  if (!all.h) vd = 'سجّل محفوظك من الخريطة ليظهر هنا ورد المراجعة اليومي.';
+  else if (!revToday.length) vd = vn >= q ? '<span class="done-msg">أتممتَ ورد المراجعة ✓</span>' : '<span class="done-msg">لا مراجعة مستحقة اليوم ✓</span>';
+  else vd = `ورد اليوم: <span class="tgt">${describePages(revToday)}</span>`;
+  if (all.h) vd += `<br>مراجعة ${ayat(all.h)} كل ${ayyamN(cycle)} = ${ayat(q)} يوميًا`;
+  planRow('planRev', METRICS.rev, q, vd, !revToday.length);
+}
+$('hHifzOpen').onclick = () => hifzToday.length && openReader(pageOf[hifzToday[0]], 'hifz');
+$('hHifzDone').onclick = () => {
+  if (!hifzToday.length) return;
+  applyAct(hifzToday.filter(i => !(state[i] & 1)), 1); save(); refreshAll();
+};
+$('hRevOpen').onclick = () => revToday.length && openReader(revToday[0], 'rev');
+$('hRevDone').onclick = () => {
+  if (!revToday.length) return;
+  applyReview(pageAyat(revToday)); save(); refreshAll();
+};
 
 $('donut').addEventListener('pointermove', e => {
   const a = e.target.closest('.seg-arc');
@@ -242,7 +398,7 @@ function reviewCard() {
     $('rvList').innerHTML = '';
     return;
   }
-  const t = today(), groups = GROUPS[view], due = [];
+  const t = today(), groups = GROUPS.suras, due = [];   // ثابتة على السور، لا تتبع عرض الخريطة
   groups.forEach((g, k) => {
     let d = 0, oldest = Infinity;
     for (let i = g.from; i <= g.to; i++) if (isDue(i)) { d++; oldest = Math.min(oldest, rev[i]); }
@@ -255,9 +411,9 @@ function reviewCard() {
   const MAX = 8;
   if (due.length) {
     $('rvList').innerHTML = due.slice(0, MAX).map(x => {
-      const g = groups[x.k], name = groups === GROUPS.suras ? g.title.replace('سورة ', '') : g.title;
+      const g = groups[x.k], name = g.title.replace('سورة ', '');
       return `<button class="chip" data-g="${x.k}"><b>${name}</b><span>${ayat(x.d)} · ${ayyam(t - x.oldest)}</span></button>`;
-    }).join('') + (due.length > MAX ? `<span class="more">و${units(due.length - MAX)} أخرى</span>` : '');
+    }).join('') + (due.length > MAX ? `<span class="more">و${plural(due.length - MAX, 'سورة واحدة', 'سورتان', 'سور', 'سورة')} أخرى</span>` : '');
   } else {
     let next = Infinity;
     for (let i = 0; i < TOTAL; i++) if (state[i] & 1) next = Math.min(next, rev[i] + cycle);
@@ -266,8 +422,13 @@ function reviewCard() {
   }
 }
 $('rvList').addEventListener('click', e => {
-  const c = e.target.closest('.chip'); if (c) openSheet(+c.dataset.g, true);
+  const c = e.target.closest('.chip'); if (c) openGroup('suras', +c.dataset.g, true);
 });
+// اللوحة تعتمد على عرض الخريطة، فنضبطه أولًا
+function openGroup(v, k, selectDue = false) {
+  if (view !== v) { view = v; try { localStorage.setItem(KEY + '.view', view); } catch (e) {} renderMap(); }
+  openSheet(k, selectDue);
+}
 $('cycle').value = cycle;
 $('cycle').addEventListener('change', e => { cycle = +e.target.value; save(); refreshAll(); });
 
@@ -275,6 +436,8 @@ $('cycle').addEventListener('change', e => { cycle = +e.target.value; save(); re
 //  المصحف
 // ======================================================================
 let page = lastPage, readTimer = null, readLeft = 0;
+// وضع المصحف: 'read' قراءة الورد، 'hifz' و'rev' جلسة حفظ أو مراجعة لا تُحسب في القراءة ولا تحرّك موضعها
+let readerMode = 'read';
 const BASMALA = 'بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ';
 
 $('rSura').innerHTML = '<option value="">انتقل إلى سورة…</option>' + SURAS.map((s, k) => `<option value="${k + 1}">${ar(k + 1)}. ${s[0]}</option>`).join('');
@@ -288,7 +451,7 @@ $('fsUp').onclick = () => setFs(2);
 $('fsDown').onclick = () => setFs(-2);
 
 function renderPage() {
-  const [f, t] = pageB[page - 1];
+  const [f, t] = pageB[page - 1], hifzSet = new Set(hifzToday);
   let html = '';
   for (let i = f; i <= t; i++) {
     const s = suraOf[i], a = ayahOf(i);
@@ -296,7 +459,7 @@ function renderPage() {
       html += `<div class="sura-h">سورة ${SURAS[s - 1][0]}</div>`;
       if (s !== 1 && s !== 9) html += `<span class="basm">${BASMALA}</span>`;
     }
-    const cls = isDue(i) ? ' due' : '';
+    const cls = isDue(i) ? ' due' : readerMode === 'hifz' && hifzSet.has(i) ? ' h1' : '';
     html += `<span class="ay${cls}" data-i="${i}">${AYAT[i]}</span> <span class="anum">۝${ar(a)}</span> `;
   }
   $('mtext').innerHTML = html;
@@ -321,6 +484,11 @@ function refreshPageActions() {
 function startReadTimer() {
   clearInterval(readTimer); readTimer = null;
   const st = $('readSt');
+  if (readerMode !== 'read') {
+    st.className = 'readst';
+    st.textContent = readerMode === 'rev' ? '🔁 جلسة مراجعة · لا تُحسب في ورد القراءة' : '🧠 جلسة حفظ · لا تُحسب في ورد القراءة';
+    return;
+  }
   if (readOn(today()).includes(page)) { st.className = 'readst ok'; st.textContent = '✓ قُرئت اليوم'; return; }
   if (screen !== 'reader' || document.hidden) { st.className = 'readst'; st.textContent = ''; return; }
   readLeft = DWELL;
@@ -340,14 +508,16 @@ function startReadTimer() {
 }
 document.addEventListener('visibilitychange', () => { if (screen === 'reader') startReadTimer(); });
 
-function openReader(p) {
-  page = p; lastPage = p; save();
+function openReader(p, mode = 'read') {
+  readerMode = mode; page = p;
+  if (mode === 'read') { lastPage = p; save(); }
   if (screen !== 'reader') showScreen('reader'); else { renderPage(); scrollTo(0, 0); }
 }
 function turn(d) {
   const p = page + d;
   if (p < 1 || p > PAGES_N) return;
-  page = p; lastPage = p; save();
+  page = p;
+  if (readerMode === 'read') { lastPage = p; save(); }
   renderPage();
   scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -377,16 +547,15 @@ $('pRev').onclick = () => {
   for (let i = f; i <= t; i++) ids.push(i);
   applyReview(ids); save(); refreshAll(); renderPage();
 };
-$('pOpen').onclick = () => {
-  if (view !== 'pages') { view = 'pages'; try { localStorage.setItem(KEY + '.view', view); } catch (e) {} renderMap(); }
-  openSheet(page - 1);
-};
+$('pOpen').onclick = () => openGroup('pages', page - 1);
 ['hContinue', 'wContinue'].forEach(id => $(id).onclick = () => openReader(lastPage));
 
 // ======================================================================
 //  متابعة الورد
 // ======================================================================
 $('wirdSel').value = wird;
+$('hGoalSel').value = hGoal;
+$('hDirSel').value = hDir;
 $('wirdSel').onchange = e => { wird = +e.target.value; save(); refreshAll(); };
 
 const DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
@@ -412,26 +581,69 @@ function wirdScreen() {
       : `${last7 > 0 ? 'بمعدلك الحالي' : 'بوردك الحالي'} تُتمّ الختمة خلال ${ayyamN(Math.ceil(left / rate))} تقريبًا`}</div>` +
     `<div class="muted" style="font-size:12px;margin-top:4px">بدأت هذه الختمة ${ayyam(t - khatmaStart)}</div>`;
 
-  // مؤشرات آخر ٣٠ يومًا
-  const days = [...Array(30)].map((_, k) => t - 29 + k), counts = days.map(readCount);
-  const total = counts.reduce((a, b) => a + b, 0), met = counts.filter(c => c >= wird).length;
-  $('wKpis').innerHTML =
-    `<div class="kpi"><div class="v">${ar(streak())}</div><div class="l">أيام متتالية أتممت فيها الورد</div></div>` +
-    `<div class="kpi"><div class="v">${ar(+last7.toFixed(1))}</div><div class="l">متوسط الصفحات يوميًا (آخر ٧ أيام)</div></div>` +
-    `<div class="kpi"><div class="v">${ar(total)}</div><div class="l">صفحة في آخر ٣٠ يومًا</div></div>` +
-    `<div class="kpi"><div class="v">${ar(met)}/${ar(30)}</div><div class="l">يومًا أتممت فيه الورد</div></div>`;
-  drawChart(days, counts);
+  // ورد الحفظ: الموضع والمقدار والمدة المتوقعة
+  const all = count(0, TOTAL - 1), hn = hifzCount(t), hLeft = TOTAL - all.h, nx = nextHifz(1)[0];
+  // معدل الأسبوع لا يُعتمد إلا بعد ثلاثة أيام حفظ على الأقل، وإلا فالورد المختار
+  const last7h = [...Array(7)].map((_, k) => hifzCount(t - k));
+  const h7 = last7h.filter(Boolean).length >= 3 ? last7h.reduce((a, b) => a + b, 0) / 7 : 0;
+  $('wHifz').innerHTML = hLeft
+    ? `<div class="wbig">${ar(hn)} <small>من ${ayat(hGoal)} اليوم</small></div>` +
+      `<div class="prog"><span style="width:${Math.min(1, hn / hGoal) * 100}%;background:var(--hifz)"></span></div>` +
+      `<div style="font-size:14px">موضعك في الحفظ: <b style="font-family:Amiri,serif;font-size:16px">${describeAyat([nx])}</b></div>` +
+      `<div class="muted" style="font-size:13px;margin-top:4px">بقي ${ayat(hLeft)} · ` +
+      (h7 > 0 ? `بمعدلك في آخر أسبوع تُتمّ الحفظ خلال ${duration(Math.ceil(hLeft / h7))}` : `بهذا الورد تُتمّ الحفظ خلال ${duration(Math.ceil(hLeft / hGoal))}`) + ' تقريبًا</div>'
+    : '<div class="done-msg">🎉 أتممتَ حفظ القرآن الكريم، تقبّل الله منك</div>';
+
+  // ورد المراجعة
+  const q = revQuota(), vn = revCount(t);
+  $('wRev').innerHTML = all.h
+    ? `<div class="wbig">${ar(vn)} <small>من ${ayat(q)} اليوم</small></div>` +
+      `<div class="prog"><span style="width:${Math.min(1, vn / q) * 100}%;background:var(--both)"></span></div>` +
+      `<div style="font-size:14px">${all.d ? `<b class="red">${ayat(all.d)}</b> مستحقة للمراجعة الآن` : 'لا مراجعة مستحقة الآن ✓'}</div>` +
+      `<div class="muted" style="font-size:13px;margin-top:4px">مقدار المراجعة اليومي = محفوظك (${ayat(all.h)}) ÷ ${ayyamN(cycle)}</div>`
+    : '<div class="muted" style="font-size:14px">سجّل محفوظك من الخريطة ليُحسب ورد المراجعة اليومي تلقائيًا.</div>';
+
+  metricPanel();
 }
 
+// ---------- آخر ٣٠ يومًا لكل ورد ----------
+let metric = 'read';
+const KPI_TXT = {
+  read: ['أيام متتالية أتممت فيها ورد القراءة', 'متوسط الصفحات يوميًا (آخر ٧ أيام)', 'صفحة قرأتها في آخر ٣٠ يومًا', 'يومًا أتممت فيه ورد القراءة'],
+  hifz: ['أيام متتالية أتممت فيها ورد الحفظ', 'متوسط الآيات المحفوظة يوميًا (آخر ٧ أيام)', 'آية حفظتها في آخر ٣٠ يومًا', 'يومًا أتممت فيه ورد الحفظ'],
+  rev:  ['أيام متتالية أتممت فيها ورد المراجعة', 'متوسط الآيات المُراجَعة يوميًا (آخر ٧ أيام)', 'آية راجعتها في آخر ٣٠ يومًا', 'يومًا أتممت فيه ورد المراجعة'],
+};
+function metricPanel() {
+  const m = METRICS[metric], goal = m.goal(), t = today(), L = KPI_TXT[metric];
+  const days = [...Array(30)].map((_, k) => t - 29 + k), counts = days.map(m.n);
+  const total = counts.reduce((a, b) => a + b, 0), met = goal ? counts.filter(c => c >= goal).length : 0;
+  const avg7 = counts.slice(-7).reduce((a, b) => a + b, 0) / 7;
+  $('wKpis').innerHTML =
+    `<div class="kpi"><div class="v">${ar(streakOf(m, goal))}</div><div class="l">${L[0]}</div></div>` +
+    `<div class="kpi"><div class="v">${ar(+avg7.toFixed(1))}</div><div class="l">${L[1]}</div></div>` +
+    `<div class="kpi"><div class="v">${ar(total)}</div><div class="l">${L[2]}</div></div>` +
+    `<div class="kpi"><div class="v">${ar(met)}/${ar(30)}</div><div class="l">${L[3]}</div></div>`;
+  document.querySelectorAll('#metricSeg button').forEach(b => b.classList.toggle('on', b.dataset.m === metric));
+  drawChart(days, counts, goal);
+}
+$('metricSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  metric = b.dataset.m; metricPanel();
+});
+$('hGoalSel').onchange = e => { hGoal = +e.target.value; save(); refreshAll(); };
+$('hDirSel').onchange = e => { hDir = e.target.value; save(); refreshAll(); };
+
 // رسم أعمدة: الزمن من اليمين (الأقدم) إلى اليسار (اليوم)، وخط متقطع لمقدار الورد
-function drawChart(days, counts) {
-  const W = 640, H = 230, padR = 34, padL = 8, padT = 12, padB = 26;
-  const max = Math.max(wird, ...counts, 1), top = Math.ceil(max * 1.15);
+function drawChart(days, counts, goal) {
+  const W = 640, H = 230, padR = 40, padL = 8, padT = 12, padB = 26;
+  const max = Math.max(goal, ...counts, 1);
+  // خطوة «لطيفة» للمحور بحيث لا تزيد الخطوط على ستة
+  const step = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000].find(s => max * 1.15 / s <= 6) || 5000;
+  const top = Math.ceil(max * 1.15 / step) * step;
   const iw = W - padR - padL, ih = H - padT - padB, bw = iw / days.length;
   const y = v => padT + ih - v / top * ih;
   const xOf = k => W - padR - (k + 1) * bw;      // k=0 الأقدم على اليمين
   let g = '';
-  const step = top <= 5 ? 1 : top <= 12 ? 2 : top <= 30 ? 5 : 10;
   for (let v = 0; v <= top; v += step) {
     g += `<line x1="${padL}" x2="${W - padR}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/>` +
          `<text x="${W - padR + 6}" y="${y(v) + 4}" text-anchor="start">${ar(v)}</text>`;
@@ -442,7 +654,7 @@ function drawChart(days, counts) {
     if (c > 0) {
       const h = Math.max(3, y(0) - y(c)), r = Math.min(4, w / 2, h);
       const yy = y(0) - h;   // عمود بحافة علوية مستديرة وقاعدة مستقيمة على خط الصفر
-      bars += `<path d="M${x},${y(0)} V${yy + r} Q${x},${yy} ${x + r},${yy} H${x + w - r} Q${x + w},${yy} ${x + w},${yy + r} V${y(0)} Z" fill="${c >= wird ? 'var(--accent)' : 'var(--bar-low)'}"/>`;
+      bars += `<path d="M${x},${y(0)} V${yy + r} Q${x},${yy} ${x + r},${yy} H${x + w - r} Q${x + w},${yy} ${x + w},${yy + r} V${y(0)} Z" fill="${goal && c >= goal ? 'var(--accent)' : 'var(--bar-low)'}"/>`;
     }
     hits += `<rect class="hit" data-k="${k}" x="${xOf(k)}" y="${padT}" width="${bw}" height="${ih}"/>`;
     if (k % 5 === 4 || k === counts.length - 1) {
@@ -450,16 +662,17 @@ function drawChart(days, counts) {
       g += `<text x="${xOf(k) + bw / 2}" y="${H - 8}" text-anchor="middle">${k === counts.length - 1 ? 'اليوم' : `${ar(dt.getUTCDate())}/${ar(dt.getUTCMonth() + 1)}`}</text>`;
     }
   });
-  const wy = y(wird);
-  const line = `<line x1="${padL}" x2="${W - padR}" y1="${wy}" y2="${wy}" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="5 4" opacity=".7"/>`;
+  const wy = y(goal);
+  const line = goal ? `<line x1="${padL}" x2="${W - padR}" y1="${wy}" y2="${wy}" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="5 4" opacity=".7"/>` : '';
   $('chart').innerHTML = g + bars + line + hits;
   $('chart').dataset.days = JSON.stringify(days);
 }
 $('chart').addEventListener('pointermove', e => {
   const h = e.target.closest('.hit');
   if (!h) { tip.style.display = 'none'; return; }
-  const d = JSON.parse($('chart').dataset.days)[+h.dataset.k], c = readCount(d);
-  showTip(e, `${dayLabel(d)}: ${c ? safahat(c) : 'لا قراءة'}${c >= wird ? ' ✓' : ''}`);
+  const m = METRICS[metric], goal = m.goal();
+  const d = JSON.parse($('chart').dataset.days)[+h.dataset.k], c = m.n(d);
+  showTip(e, `${dayLabel(d)}: ${c ? m.unit(c) : 'لا شيء'}${goal && c >= goal ? ' ✓' : ''}`);
 });
 $('chart').addEventListener('pointerleave', () => tip.style.display = 'none');
 
@@ -618,17 +831,24 @@ function applyAct(ids, act) {
   if (act === 0) op = () => 0;
   else if (act === 3) op = () => 3;
   else op = ids.every(i => state[i] & act) ? v => v & ~act : v => v | act;
-  const t = today();
+  // ما يُسجَّل من الخريطة محفوظٌ سابق؛ وما يُسجَّل من الرئيسية أو المصحف حفظٌ جديد يُحسب في ورد اليوم
+  const t = today(), fresh = screen !== 'mapScreen';
+  const todayH = new Set(hifzLog[t] || []);
   ids.forEach(i => {
     const was = state[i] & 1;
     state[i] = op(state[i]);
-    if (!(state[i] & 1)) rev[i] = 0;
-    else if (!was) rev[i] = t;
+    if (!(state[i] & 1)) { rev[i] = 0; todayH.delete(i); }
+    else if (!was) { rev[i] = t; if (fresh) todayH.add(i); }
   });
+  if (todayH.size) hifzLog[t] = [...todayH]; else delete hifzLog[t];
 }
+// تُحسب الآية مرة واحدة في اليوم، ولا يُعدّ الحفظ الجديد مراجعة
 function applyReview(ids) {
   const t = today();
-  ids.forEach(i => { if (state[i] & 1) rev[i] = t; });
+  let n = 0;
+  ids.forEach(i => { if ((state[i] & 1) && rev[i] !== t) { rev[i] = t; n++; } });
+  if (n) revLog[t] = (revLog[t] || 0) + n;
+  return n;
 }
 
 // ---------- التلميح ----------
@@ -773,7 +993,12 @@ function showScreen(s) {
   if (s === 'home') dashboard();
   scrollTo(0, 0);
 }
-$('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) showScreen(b.dataset.s); });
+$('tabs').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  // تبويب المصحف يعود دائمًا إلى موضع القراءة
+  if (b.dataset.s === 'reader' && readerMode !== 'read') { readerMode = 'read'; page = lastPage; }
+  showScreen(b.dataset.s);
+});
 document.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => showScreen(b.dataset.goto));
 
 function refreshAll() {
@@ -786,7 +1011,7 @@ function refreshAll() {
 //  النسخة الاحتياطية
 // ======================================================================
 function exportBackup() {
-  const data = { app: 'quran-map', v: 3, date: new Date().toISOString(), state: state.join(''), rev: [...rev], cycle, readLog, wird, lastPage, khatmaStart };
+  const data = { app: 'quran-map', v: 4, date: new Date().toISOString(), state: state.join(''), rev: [...rev], cycle, readLog, wird, lastPage, khatmaStart, hifzLog, revLog, hGoal, hDir };
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -812,8 +1037,14 @@ function parseBackup(d) {
     wird: opt(d.wird, oneOf(WIRDS), wird),
     lastPage: opt(d.lastPage, v => int(v, 1, PAGES_N), 1),
     khatmaStart: opt(d.khatmaStart, day, today()),
+    hifzLog: opt(d.hifzLog, cleanHLog, {}),
+    revLog: opt(d.revLog, cleanRLog, {}),
+    hGoal: opt(d.hGoal, oneOf(HGOALS), hGoal),
+    hDir: opt(d.hDir, cleanDir, hDir),
   };
-  return Object.values(out).includes(null) ? null : out;
+  if (Object.values(out).includes(null)) return null;
+  out.date = typeof d.date === 'string' ? d.date : null;
+  return out;
 }
 $('imp').onclick = () => $('file').click();
 $('file').onchange = async e => {
@@ -834,7 +1065,7 @@ $('file').onchange = async e => {
     rev[i] = d.rev[i] || 0;
     if ((state[i] & 1) && !rev[i]) rev[i] = t;
   }
-  ({ cycle, readLog, wird, lastPage, khatmaStart } = d);
+  ({ cycle, readLog, wird, lastPage, khatmaStart, hifzLog, revLog, hGoal, hDir } = d);
   save(); syncControls(); renderMap(); refreshAll();
 };
 
@@ -850,6 +1081,7 @@ function backupCard() {
 // ---------- مزامنة النوافذ المفتوحة: نافذة قديمة لا تكتب فوق تغييرات نافذة أحدث ----------
 function syncControls() {
   $('cycle').value = cycle; $('wirdSel').value = wird;
+  $('hGoalSel').value = hGoal; $('hDirSel').value = hDir;
   document.documentElement.style.setProperty('--qfs', fontSize + 'px');
 }
 let syncT = null;
