@@ -1,13 +1,13 @@
 {
   "name": "sahibak-al-quran",
   "productName": "صاحبُك القرآن",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "صاحبُك القرآن: تتبّع حفظك وفهمك وقراءتك ومراجعتك للقرآن الكريم، مع مصحف المدينة (طبعة 1441) والتفسير",
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
     "web": "python -m http.server 8765",
-    "icon": "node tools/make-icon.js",
+    "icon": "electron tools/render-icon.js",
     "smoke": "node tests/smoke.js",
     "dist": "node tests/smoke.js && electron-builder --win nsis --publish never",
     "release": "node tests/smoke.js && electron-builder --win nsis --publish always"

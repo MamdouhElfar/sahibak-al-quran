@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>شعار صاحبُك القرآن</title>
+<!-- شعار التطبيق (الاتجاه ٤: نستعليق متدرّج، «القرآن» أعلى و«صاحبُك» أسفل) بمقاس ٥١٢؛ يرسمه tools/render-icon.js إلى PNG -->
+<link href="../fonts/ui.css" rel="stylesheet">
+<style>
+html,body{margin:0;background:transparent}
+.tile{position:relative;width:512px;height:512px;border-radius:113px;background:#131518;overflow:hidden}
+.tile svg{position:absolute;inset:0;width:512px;height:512px;opacity:.18}
+.box{position:absolute;width:422px;height:384px;left:45px;top:64px}
+.w{position:absolute;font-family:'Noto Nastaliq Urdu',serif;font-weight:700;line-height:2;white-space:nowrap}
+.q{left:5px;top:-24px;font-size:92px;color:#fbf6e8}
+.s{right:17px;top:146px;font-size:108px;color:#e8c766}
+</style>
+</head>
+<body>
+<div class="tile" id="tile">
+  <svg viewBox="0 0 100 100" aria-hidden="true">
+    <circle cx="50" cy="50" r="44" fill="none" stroke="#e8c766" stroke-width="0.4"></circle>
+    <circle cx="50" cy="50" r="40" fill="none" stroke="#e8c766" stroke-width="0.4"></circle>
+  </svg>
+  <div class="box">
+    <span class="w q">القرآن</span>
+    <span class="w s">صاحبُك</span>
+  </div>
+</div>
+</body>
+</html>

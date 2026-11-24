@@ -42,8 +42,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:Tajawal,system-u
 body{padding-right:212px}
 #side{position:fixed;top:0;bottom:0;right:0;width:212px;z-index:9;background:var(--card);border-left:1px solid var(--line);
   display:flex;flex-direction:column;gap:22px;padding:20px 12px;box-sizing:border-box}
-.brand{display:flex;align-items:center;gap:10px;padding:0 6px;font-family:Amiri,serif;font-size:22px;font-weight:700;color:var(--accent);white-space:nowrap}
-.brand img{width:34px;height:34px}
+.brand{display:flex;align-items:center;gap:10px;padding:0 6px;font-family:'Noto Nastaliq Urdu',Amiri,serif;font-size:19px;font-weight:700;line-height:2.1;color:var(--accent);white-space:nowrap}
+.brand img{width:40px;height:40px;border-radius:10px}
 #tabs{display:flex;flex-direction:column;gap:4px}
 #tabs button{display:flex;align-items:center;gap:10px;border:0;background:none;font:inherit;font-size:15px;color:var(--ink);padding:10px 12px;border-radius:10px;cursor:pointer;text-align:start}
 #tabs button:hover{background:var(--hover)}
@@ -54,7 +54,8 @@ body{padding-right:212px}
 #tabs2 button:hover{background:var(--hover)}
 #tabs2 button.on{background:var(--accent);color:var(--bg);font-weight:700}
 .setrow{margin-top:10px;font-size:14px}
-.about-name{font-family:Amiri,serif;font-size:28px;font-weight:700;color:var(--accent)}
+.about-name{display:flex;align-items:center;gap:14px;font-family:'Noto Nastaliq Urdu',Amiri,serif;font-size:26px;font-weight:700;line-height:2.2;color:var(--accent)}
+.about-name img{width:64px;height:64px;border-radius:15px}
 #updProg[hidden]{display:none}
 .hadith{margin:8px 0;padding:10px 14px;border-inline-start:3px solid var(--both);background:color-mix(in srgb,var(--both) 8%,var(--card));border-radius:8px;font-family:Amiri,serif;font-size:18px;line-height:1.9}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--card)}
@@ -691,7 +692,7 @@ body.bulk-on{padding-bottom:130px}
 
   <div class="card">
     <h3>ℹ️ عن التطبيق</h3>
-    <div class="about-name">صاحبُك القرآن</div>
+    <div class="about-name"><img src="electron/icon.png" alt="">صاحبُك القرآن</div>
     <div style="font-size:14px;line-height:1.9">سُمّي التطبيق من حديث بُريدة رضي الله عنه عن النبي ﷺ:</div>
     <blockquote class="hadith">«إنّ القرآنَ يلقى صاحبَه يومَ القيامة حين ينشقّ عنه قبرُه كالرجل الشاحب … فيقول: أنا صاحبُك القرآنُ الذي أظمأتُك في الهواجر، وأسهرتُ ليلك …»</blockquote>
     <div class="muted" style="font-size:12px;line-height:1.9">رواه أحمد (٢٢٩٥٠) وابن أبي شيبة في المصنّف والدارمي. حسّن إسنادَه ابنُ حجر في المطالب العالية والبوصيري، وفي إسناده بشير بن المهاجر وقد تُكُلِّم فيه فضعّفه بعض المحقّقين. وأصله مختصرًا عند ابن ماجه (٣٧٨١): «يجيء القرآن يوم القيامة كالرجل الشاحب فيقول: أنا الذي أسهرتُ ليلك وأظمأتُ نهارك»، وحسّنه الألباني.</div>

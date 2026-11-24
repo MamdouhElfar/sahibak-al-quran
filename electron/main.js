@@ -152,7 +152,7 @@ ipcMain.handle('tray:set', (e, on) => { config.keepInTray = !!on; saveConfig(); 
 let tray = null;
 function setupTray() {
   if (SMOKE) return;
-  tray = new Tray(ICON);
+  tray = new Tray(path.join(__dirname, 'tray.png'));
   tray.setToolTip('صاحبُك القرآن');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'فتح صاحبُك القرآن', click: showMain },

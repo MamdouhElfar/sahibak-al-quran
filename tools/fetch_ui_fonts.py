@@ -1,11 +1,11 @@
-# ينزّل خطوط الواجهة من Google Fonts (Amiri وAmiri Quran وTajawal، رخصة OFL) ويكتب fonts/ui.css بمسارات محلية
+# ينزّل خطوط الواجهة من Google Fonts (Amiri وAmiri Quran وTajawal ونستعليق Noto للشعار، رخصة OFL) ويكتب fonts/ui.css بمسارات محلية
 # الاستخدام: python -I tools/fetch_ui_fonts.py
 import os, re, urllib.request
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fonts")
 OUT = os.path.join(ROOT, "ui")
 os.makedirs(OUT, exist_ok=True)
-CSS_URL = "https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Amiri+Quran&family=Tajawal:wght@400;500;700&display=swap"
+CSS_URL = "https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Amiri+Quran&family=Tajawal:wght@400;500;700&family=Noto+Nastaliq+Urdu:wght@700&display=swap"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
 
 def get(url):
