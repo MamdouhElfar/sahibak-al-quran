@@ -18,13 +18,14 @@ const DATA_FILE = path.join(USER_DIR, 'data.json');
 const BACKUP_DIR = path.join(USER_DIR, 'backups');
 const LOG_FILE = path.join(USER_DIR, 'errors.log');
 const SMOKE = process.env.QURAN_SMOKE || '';
-const START_HIDDEN = process.argv.includes('--hidden');   // عند البدء مع ويندوز
 const ICON = path.join(__dirname, 'icon.png');
 
 // إعدادات سطح المكتب (منفصلة عن بيانات الورد)
 const CONFIG_FILE = path.join(USER_DIR, 'config.json');
 let config = { autostart: true, keepInTray: true, trayHintShown: false };
 try { config = { ...config, ...JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) }; } catch { /* أول تشغيل */ }
+// يبدأ مخفيًا مع ويندوز، أو بعد تحديث ثُبِّت تلقائيًا والتطبيق في الخلفية
+const START_HIDDEN = process.argv.includes('--hidden') || config.startHiddenOnce === true;
 const saveConfig = () => { try { fs.mkdirSync(USER_DIR, { recursive: true }); fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2)); } catch (e) { logError('config', e); } };
 
 function logError(where, msg) {
@@ -114,13 +115,27 @@ function setupAutoUpdate() {
     ready = i.version;
     sendUpd({ status: 'ready', version: i.version });
     if (win) win.webContents.send('update-ready', i.version);
+    installIfHidden();
   });
+  // التحديث تلقائي: إن كانت النافذة مخفية (التطبيق بجوار الساعة) يُثبَّت فورًا بصمت ويعود التطبيق إلى الخلفية؛
+  // وإن كانت ظاهرة فعند إخفائها، أو بالزر «حدِّث الآن» فيُثبَّت ويفتح التطبيق مباشرة
+  const installIfHidden = () => {
+    if (!ready || !win || win.isVisible()) return;
+    config.startHiddenOnce = true; saveConfig();
+    updaterInstall();
+  };
+  if (win) win.on('hide', () => setTimeout(installIfHidden, 1500));
   autoUpdater.on('error', e => { logError('updater', e && e.message || e); if (!ready) sendUpd({ status: 'error' }); });
   const check = () => { if (upd.status !== 'downloading') autoUpdater.checkForUpdates().catch(() => {}); };
   updaterCheck = check;
   setTimeout(check, 8000);
   setInterval(check, 60 * 60 * 1000);
-  updaterInstall = () => { quitting = true; autoUpdater.quitAndInstall(true, true); };
+  // /S --force-run: تثبيت صامت بلا معالج، ثم يُفتح التطبيق وحده
+  updaterInstall = () => {
+    quitting = true;
+    if (remWin) { remWin.destroy(); remWin = null; }
+    setImmediate(() => autoUpdater.quitAndInstall(true, true));
+  };
 }
 
 // ---------- التشغيل مع ويندوز ----------
@@ -177,6 +192,7 @@ ipcMain.on('reminder:show', (e, r) => { if (r && r.kind && !SMOKE) showReminder(
 ipcMain.on('reminder:act', (e, kind, action) => { if (remWin && remWin.__act) remWin.__act(kind, action); });
 
 function createWindow() {
+  if (config.startHiddenOnce) { config.startHiddenOnce = false; saveConfig(); }
   win = new BrowserWindow({
     width: 1360, height: 900, minWidth: 980, minHeight: 680,
     title: 'صاحبُك القرآن', show: false, autoHideMenuBar: true,

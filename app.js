@@ -3,7 +3,7 @@
 // • سجل القراءة اليومي: { رقم اليوم: [أرقام الصفحات] } + الورد اليومي + موضع الوقوف + بداية الختمة
 const TOTAL = 6236, PAGES_N = 604;
 const KEY = 'quranMap.v1';
-const DWELL = 15;                 // ثوانٍ يجب أن تبقى الصفحة مفتوحة لتُحسب مقروءة
+const DWELLS = [5, 10, 15, 20, 30, 45, 60];   // ثوانٍ تبقى فيها الصفحة مفتوحة لتُحسب مقروءة (من الإعدادات)
 const ar = n => n.toLocaleString('ar-EG');
 const $ = id => document.getElementById(id);
 
@@ -51,6 +51,7 @@ const today = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 6e
 const state = new Uint8Array(TOTAL);
 const rev = new Int32Array(TOTAL);
 let cycle = 14, readLog = {}, wird = 5, lastPage = 1, khatmaStart = today(), fontSize = 26;
+let dwell = 15;
 let backupDay = 0, backupSnooze = 0;   // يوم آخر نسخة احتياطية، ويوم تأجيل التذكير
 // ورد الحفظ والمراجعة
 let hifzLog = {};   // { رقم اليوم: [أرقام الآيات التي حُفظت جديدًا فيه] }
@@ -171,6 +172,7 @@ function load() {
   revLog = read('.rlog', json, cleanRLog) ?? {};
   hGoal = read('.hgoal', str, oneOf(HGOALS)) ?? 5;
   hDir = read('.hdir', str, cleanDir) ?? 'b';
+  dwell = read('.dwell', str, oneOf(DWELLS)) ?? 15;
   refs = read('.refs', json, cleanRefs) ?? { cats: [], items: [] };
   remind = read('.remind', json, cleanRemind) ?? JSON.parse(JSON.stringify(REM_DEF));
   const t = today();
@@ -200,6 +202,7 @@ function save() {
     localStorage.setItem(KEY + '.rlog', JSON.stringify(revLog));
     localStorage.setItem(KEY + '.hgoal', hGoal);
     localStorage.setItem(KEY + '.hdir', hDir);
+    localStorage.setItem(KEY + '.dwell', dwell);
     localStorage.setItem(KEY + '.refs', JSON.stringify(refs));
     localStorage.setItem(KEY + '.remind', JSON.stringify(remind));
     deskSave();
@@ -774,7 +777,7 @@ function startReadTimer() {
     return;
   }
   if (screen !== 'reader' || document.hidden) { st.className = 'readst'; st.textContent = ''; return; }
-  readLeft = DWELL;
+  readLeft = dwell;
   const tick = () => {
     if (readLeft <= 0) {
       const p = todo.shift();
@@ -786,7 +789,7 @@ function startReadTimer() {
         st.className = 'readst ok'; st.textContent = '✓ أُضيفت إلى ورد اليوم · تابع إلى ما بعدها';
         return;
       }
-      readLeft = DWELL;
+      readLeft = dwell;
     }
     st.className = 'readst';
     const which = todo.length > 1 ? 'الصفحة اليمنى' : vis.length > 1 && todo[0] === vis[1] ? 'الصفحة اليسرى' : 'الصفحة';
@@ -1888,7 +1891,7 @@ if (DESK) {
   $('openBk').onclick = () => DESK.openBackups();
   $('appVer').textContent = `الإصدار ${DESK.version}`;
   DESK.onUpdateReady(v => {
-    $('updTxt').textContent = `تحديث جديد (${v}) جاهز، ويُثبَّت تلقائيًا عند إغلاق التطبيق.`;
+    $('updTxt').textContent = `تحديث جديد (${v}) جاهز، ويُثبَّت تلقائيًا بصمت حين تُغلق النافذة.`;
     $('updBar').hidden = false;
   });
   $('updNow').onclick = () => { deskSave(); if (deskT) { clearTimeout(deskT); DESK.writeDataSync(deskSnapshot()); } DESK.installUpdate(); };
@@ -1914,7 +1917,7 @@ const UPD_TXT = {
   latest: () => 'لديك أحدث إصدار ✓',
   error: () => 'تعذّر البحث عن تحديث؛ تحقّق من الاتصال بالإنترنت ثم أعد المحاولة.',
   downloading: u => `جارٍ تنزيل الإصدار ${u.version || ''} في الخلفية… ${ar(u.percent || 0)}٪`,
-  ready: u => `الإصدار ${u.version} جاهز ✓ ويُثبَّت عند إغلاق التطبيق، أو الآن من الزر.`,
+  ready: u => `الإصدار ${u.version} جاهز ✓ ويُثبَّت تلقائيًا حين تُغلق النافذة، أو الآن من الزر فيُعاد فتح التطبيق مباشرة.`,
 };
 function drawUpd(u) {
   $('updState').textContent = (UPD_TXT[u.status] || UPD_TXT.idle)(u);
@@ -1925,6 +1928,7 @@ function drawUpd(u) {
 }
 function settingsScreen() {
   $('mStyle').value = mStyle;
+  $('dwellSel').value = dwell;
   $('themeSel').value = theme;
   if (DESK) { $('setVer').textContent = `الإصدار ${DESK.version}`; drawUpd(DESK.getUpdate()); }
   else {
@@ -1938,6 +1942,7 @@ $('mStyle').onchange = e => {
   mStyle = e.target.value;
   try { localStorage.setItem(KEY + '.mstyle', mStyle); } catch (err) {} deskSave();
 };
+$('dwellSel').onchange = e => { dwell = +e.target.value; save(); if (screen === 'reader') startReadTimer(); };
 $('themeSel').onchange = e => {
   theme = e.target.value;
   try { localStorage.setItem(KEY + '.theme', theme); } catch (err) {} deskSave();

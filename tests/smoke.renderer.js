@@ -46,6 +46,11 @@
     openReader(77); await wait(1200);
     checks['العودة إلى مصحف المدينة'] = bookOn;
 
+    // مدة احتساب الصفحة من الإعدادات
+    showScreen('settings'); $('dwellSel').value = '5'; $('dwellSel').dispatchEvent(new Event('change'));
+    lastPage = 200; openReader(200); await wait(400);
+    checks['مدة احتساب الصفحة تتبع الإعدادات'] = dwell === 5 && readLeft <= 5 && $('readSt').textContent.includes('ث');
+
     // الحفظ في الملف
     applyAct([start[114]], 1); save(); await wait(900);
     const file = qmDesktop.readData();
