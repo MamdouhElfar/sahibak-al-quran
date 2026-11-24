@@ -20,7 +20,8 @@ function bounds(list) {
   const st = list.map(([s, a]) => gi(s, a));
   return st.map((f, k) => [f, (st[k + 1] ?? TOTAL) - 1]);
 }
-const pageB = bounds(PAGES), juzB = bounds(JUZ);
+// حدود الصفحات من طبعة المدينة 1441 إن توفرت (تختلف عن ترقيم Tanzil في ٢٥ صفحة)
+const pageB = bounds(typeof M1441_STARTS !== 'undefined' ? M1441_STARTS : PAGES), juzB = bounds(JUZ);
 const pageOf = new Uint16Array(TOTAL), juzOf = new Uint8Array(TOTAL);
 pageB.forEach(([f, t], k) => pageOf.fill(k + 1, f, t + 1));
 juzB.forEach(([f, t], k) => juzOf.fill(k + 1, f, t + 1));
@@ -117,8 +118,9 @@ function load() {
   lastPage = read('.last', str, v => int(v, 1, PAGES_N)) ?? 1;
   khatmaStart = read('.khatma', str, day) ?? today();
   fontSize = read('.fs', str, v => int(v, 18, 40)) ?? 26;
-  backupDay = read('.bk', str, day) ?? 0;
-  backupSnooze = read('.bkLater', str, day) ?? 0;
+  const day0 = v => int(v, 0, today() + 1);   // ٠ = لم يحدث بعد
+  backupDay = read('.bk', str, day0) ?? 0;
+  backupSnooze = read('.bkLater', str, day0) ?? 0;
   hifzLog = read('.hlog', json, cleanHLog) ?? {};
   revLog = read('.rlog', json, cleanRLog) ?? {};
   hGoal = read('.hgoal', str, oneOf(HGOALS)) ?? 5;
@@ -450,8 +452,34 @@ const setFs = d => { fontSize = Math.min(40, Math.max(18, fontSize + d)); docume
 $('fsUp').onclick = () => setFs(2);
 $('fsDown').onclick = () => setFs(-2);
 
-function renderPage() {
-  const [f, t] = pageB[page - 1], hifzSet = new Set(hifzToday);
+// ---------- رسم مصحف المدينة (طبعة 1441) سطرًا بسطر بخطوط مجمع الملك فهد (QPC V2) ----------
+// لكل صفحة خط خاص يُحمَّل عند فتحها ويحفظه المتصفح؛ وإن تعذّر التحميل يُعرض النص العادي
+const HAS_M = typeof M1441 !== 'undefined';
+const QCF_URL = p => `https://static.qurancdn.com/fonts/quran/hafs/v2/woff2/p${p}.woff2`;
+const qcfLoads = {};
+function loadQcf(p) {
+  if (!(p >= 1 && p <= PAGES_N)) return Promise.resolve(false);
+  return qcfLoads[p] ||= new FontFace(`qcf${p}`, `url(${QCF_URL(p)})`, { display: 'block' }).load()
+    .then(f => { document.fonts.add(f); return true; })
+    .catch(() => { delete qcfLoads[p]; return false; });   // يُعاد المحاولة لاحقًا
+}
+// البسملة برسمها في الفاتحة (الصفحة الأولى) دون رقم الآية
+const BASM_GLYPHS = HAS_M ? M1441[1].find(r => Array.isArray(r[0]) && r[0][0] === 0)[0][1].split(' ').slice(0, -1) : [];
+
+function ayahCls(i, hifzSet) {
+  return isDue(i) ? ' due' : readerMode === 'hifz' && hifzSet.has(i) ? ' h1' : '';
+}
+function mushafHtml(p, hifzSet) {
+  return M1441[p].map(r => {
+    if (r[0] === 'h') return `<div class="ml mh"><span>سورة ${SURAS[r[1] - 1][0]}</span></div>`;
+    if (r[0] === 'b') return `<div class="ml mb" style="font-family:qcf1">${BASM_GLYPHS.map(g => `<span>${g}</span>`).join('')}</div>`;
+    return '<div class="ml">' + r.map(([i, w]) => {
+      const c = ayahCls(i, hifzSet);
+      return w.split(' ').map(g => `<span class="w${c}" data-i="${i}">${g}</span>`).join('');
+    }).join('') + '</div>';
+  }).join('');
+}
+function plainHtml(f, t, hifzSet) {   // احتياطي: نص عادي إن لم يتوفر خط الصفحة
   let html = '';
   for (let i = f; i <= t; i++) {
     const s = suraOf[i], a = ayahOf(i);
@@ -459,10 +487,53 @@ function renderPage() {
       html += `<div class="sura-h">سورة ${SURAS[s - 1][0]}</div>`;
       if (s !== 1 && s !== 9) html += `<span class="basm">${BASMALA}</span>`;
     }
-    const cls = isDue(i) ? ' due' : readerMode === 'hifz' && hifzSet.has(i) ? ' h1' : '';
-    html += `<span class="ay${cls}" data-i="${i}">${AYAT[i]}</span> <span class="anum">۝${ar(a)}</span> `;
+    html += `<span class="ay${ayahCls(i, hifzSet)}" data-i="${i}">${AYAT[i]}</span> <span class="anum">۝${ar(a)}</span> `;
   }
-  $('mtext').innerHTML = html;
+  return html;
+}
+// حجم الخط يتبع عرض الصفحة؛ ويُصغَّر إن تجاوز سطرٌ العرض
+const QCF_RATIO = 16.4;   // مقيس: أعرض سطر في الصفحات ≈ ١٦٫٣ ضعف حجم الخط
+function fitMushaf() {
+  const el = $('mtext');
+  if (!el.classList.contains('qcf')) return;
+  const W = el.clientWidth;
+  let fs = W / QCF_RATIO;
+  el.style.fontSize = fs + 'px';
+  const widest = Math.max(...[...el.querySelectorAll('.ml:not(.mh)')].map(l =>
+    [...l.children].reduce((s, c) => s + c.getBoundingClientRect().width, 0)));
+  if (widest > W) el.style.fontSize = fs * W / widest * 0.98 + 'px';
+}
+new ResizeObserver(() => fitMushaf()).observe($('mtext'));
+
+let drawSeq = 0;
+async function drawText(p) {
+  const seq = ++drawSeq, el = $('mtext'), [f, t] = pageB[p - 1], hifzSet = new Set(hifzToday);
+  let ok = false;
+  if (HAS_M) {
+    if (!qcfLoads[p]) el.classList.add('loading');
+    ok = (await Promise.all([loadQcf(p), loadQcf(1)])).every(Boolean);
+    if (seq !== drawSeq) return;        // انتقل المستخدم إلى صفحة أخرى أثناء التحميل
+  }
+  el.classList.remove('loading');
+  el.classList.toggle('qcf', ok);
+  el.classList.toggle('opening', ok && p <= 2);
+  el.style.fontFamily = ok ? `qcf${p}` : '';
+  el.style.fontSize = '';
+  el.innerHTML = ok ? mushafHtml(p, hifzSet) : plainHtml(f, t, hifzSet);
+  fitMushaf();
+  [p + 1, p - 1].forEach(loadQcf);      // تحميل مسبق للصفحتين المجاورتين
+}
+// تظليل الآية كلها عند المرور على أي كلمة منها
+$('mtext').addEventListener('pointerover', e => {
+  const w = e.target.closest('.w');
+  $('mtext').querySelectorAll('.w.hov').forEach(x => x.classList.remove('hov'));
+  if (w) $('mtext').querySelectorAll(`.w[data-i="${w.dataset.i}"]`).forEach(x => x.classList.add('hov'));
+});
+$('mtext').addEventListener('pointerleave', () => $('mtext').querySelectorAll('.w.hov').forEach(x => x.classList.remove('hov')));
+
+function renderPage() {
+  const [f] = pageB[page - 1];
+  drawText(page);
   $('mpSura').textContent = `سورة ${SURAS[suraOf[f] - 1][0]}`;
   $('mpJuz').textContent = `الجزء ${ar(juzOf[f])}`;
   $('mpNum').textContent = ar(page);
