@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>تذكير</title>
+<link href="../fonts/ui.css" rel="stylesheet">
+<style>
+:root{--bg:#fffdf8;--ink:#2b2a26;--muted:#7f796d;--line:#e8e2d4;--accent:#1f5e4a;--hover:#efe9db}
+@media (prefers-color-scheme: dark){:root{--bg:#1c1f23;--ink:#ece8de;--muted:#9a958b;--line:#2a2e34;--accent:#6fd0a8;--hover:#23272c}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:Tajawal,system-ui,sans-serif;overflow:hidden;user-select:none}
+body{border:1px solid var(--line);border-inline-start:4px solid var(--accent);display:flex;flex-direction:column;padding:14px 16px 12px;-webkit-app-region:drag}
+.top{display:flex;align-items:center;gap:10px}
+.top img{width:26px;height:26px}
+h1{flex:1;margin:0;font-family:Amiri,serif;font-size:21px;color:var(--accent)}
+.x{border:0;background:none;color:var(--muted);font-size:16px;cursor:pointer;-webkit-app-region:no-drag}
+p{margin:8px 0 0;font-size:14px;line-height:1.7;flex:1;overflow:hidden}
+.row{display:flex;gap:8px;-webkit-app-region:no-drag}
+button.b{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:9px;padding:6px 12px;cursor:pointer}
+button.b:hover{border-color:var(--accent)}
+button.pri{background:var(--accent);border-color:var(--accent);color:var(--bg);font-weight:700}
+.sp{flex:1}
+</style>
+</head>
+<body>
+  <div class="top"><img src="icon.png" alt=""><h1 id="t"></h1><button class="x" data-a="dismiss" title="ليس اليوم">✕</button></div>
+  <p id="b"></p>
+  <div class="row">
+    <button class="b pri" data-a="open">ابدأ الآن</button>
+    <button class="b" data-a="snooze">بعد ١٥ دقيقة</button>
+    <span class="sp"></span>
+    <button class="b" data-a="dismiss">ليس اليوم</button>
+  </div>
+<script>
+  const q = new URLSearchParams(location.search);
+  document.getElementById('t').textContent = q.get('title') || '';
+  document.getElementById('b').textContent = q.get('body') || '';
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-a]');
+    if (b) window.qmDesktop.reminderAct(q.get('kind'), b.dataset.a);
+  });
+</script>
+</body>
+</html>

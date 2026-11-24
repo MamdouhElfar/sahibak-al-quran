@@ -37,16 +37,24 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:Tajawal,system-u
 .muted{color:var(--muted)}
 
 /* ---------- الرأس والتنقل ---------- */
-header{position:sticky;top:0;z-index:6;background:var(--bg);border-bottom:1px solid var(--line)}
-.hd{max-width:1100px;margin:auto;padding:10px 16px;display:flex;align-items:center;gap:12px}
-h1{font-family:Amiri,serif;font-size:26px;margin:0;color:var(--accent);font-weight:700;flex:1;white-space:nowrap}
+/* الشريط الجانبي (يمين الشاشة): أقسام التطبيق */
+body{padding-right:212px}
+#side{position:fixed;top:0;bottom:0;right:0;width:212px;z-index:9;background:var(--card);border-left:1px solid var(--line);
+  display:flex;flex-direction:column;gap:22px;padding:20px 12px;box-sizing:border-box}
+.brand{display:flex;align-items:center;gap:10px;padding:0 6px;font-family:Amiri,serif;font-size:22px;font-weight:700;color:var(--accent);white-space:nowrap}
+.brand img{width:34px;height:34px}
+#tabs{display:flex;flex-direction:column;gap:4px}
+#tabs button{display:flex;align-items:center;gap:10px;border:0;background:none;font:inherit;font-size:15px;color:var(--ink);padding:10px 12px;border-radius:10px;cursor:pointer;text-align:start}
+#tabs button:hover{background:var(--hover)}
+#tabs button.on{background:var(--accent);color:var(--bg);font-weight:700}
+#tabs i{font-style:normal;width:22px;text-align:center}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--card)}
 .seg button{border:0;background:none;color:var(--muted);font:inherit;font-size:14px;padding:6px 15px;cursor:pointer;white-space:nowrap}
 .seg button.on{background:var(--accent);color:var(--bg)}
 .screen{display:none}.screen.on{display:block}
 
 /* ---------- عناصر عامة ---------- */
-.dash{max-width:1100px;margin:auto;padding:18px 16px 30px;display:grid;gap:14px;grid-template-columns:1fr 1fr}
+.dash{max-width:1320px;margin:auto;padding:18px 16px 30px;display:grid;gap:14px;grid-template-columns:1fr 1fr}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
 .card h3{margin:0 0 10px;font-size:16px;font-weight:700}
 .wide{grid-column:1 / -1}
@@ -143,7 +151,7 @@ input[type=number]{width:70px}
   to{transform:perspective(1400px) rotateY(0);transform-origin:left center;opacity:1}}
 @media (prefers-reduced-motion:reduce){.mpage.turn-next,.mpage.turn-prev{animation:none}}
 /* لوحة التفسير: تُثبَّت يسار الشاشة ويتسع الكتاب لما بقي */
-#tafsir{position:fixed;top:64px;bottom:14px;left:14px;width:380px;z-index:7;background:var(--card);border:1px solid var(--line);
+#tafsir{position:fixed;top:14px;bottom:14px;left:14px;width:380px;z-index:7;background:var(--card);border:1px solid var(--line);
   border-radius:16px;box-shadow:0 10px 40px #0002;display:flex;flex-direction:column;overflow:hidden}
 #tafsir[hidden]{display:none}
 #reader.tf-open .reader,#reader.tf-open .rbar,#reader.tf-open .pact,#reader.tf-open .rstat{margin-left:408px;margin-right:16px}
@@ -161,6 +169,47 @@ input[type=number]{width:70px}
 .tfdl{width:100%;border-collapse:collapse;font-size:14px}
 .tfdl td{padding:9px 4px;border-top:1px solid var(--line);vertical-align:middle}
 .tfdl td.row{justify-content:flex-end;gap:6px}
+.nav{display:none!important}   /* التقليب بالكيبورد وسحب الورقة يكفيان */
+.wchip.here{border-color:var(--accent);color:var(--accent);font-weight:700}
+.recent{justify-content:center;gap:4px;font-size:13px;min-height:22px;margin-top:4px}
+/* المرجعيات */
+.tfrefs{padding:8px 14px;border-top:1px solid var(--line)}
+.rlbl{font-size:12px;color:var(--muted);margin-bottom:6px}
+.rchips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.rchip{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:3px 11px;cursor:pointer}
+.rchip:hover{border-color:var(--accent)}
+.rchip.on{background:color-mix(in srgb,var(--accent) 14%,var(--card));border-color:var(--accent);color:var(--accent);font-weight:700}
+.rnew input{font:inherit;font-size:13px;border:1px dashed var(--line);background:none;color:var(--ink);border-radius:999px;padding:3px 11px;width:130px}
+.rnew input:focus{outline:none;border-color:var(--accent);border-style:solid}
+#ctx{position:fixed;z-index:30;width:290px;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 40px #0003;padding:6px}
+#ctx[hidden]{display:none}
+#ctx .ch{font-family:Amiri,serif;font-size:16px;font-weight:700;color:var(--accent);padding:6px 10px}
+#ctx .ci{display:block;width:100%;text-align:start;font:inherit;font-size:14px;border:0;background:none;color:var(--ink);padding:8px 10px;border-radius:8px;cursor:pointer}
+#ctx .ci:hover{background:var(--hover)}
+#ctx .csep{font-size:12px;color:var(--muted);border-top:1px solid var(--line);margin-top:4px;padding:8px 10px 6px}
+#ctx .rchips{padding:0 8px 8px}
+.refs{max-width:1320px;margin:auto;padding:18px 16px 40px;display:grid;grid-template-columns:270px 1fr;gap:16px;align-items:start}
+.rcats{position:sticky;top:14px}
+.rc{display:flex;justify-content:space-between;align-items:center;width:100%;font:inherit;font-size:14px;border:0;background:none;color:var(--ink);padding:9px 10px;border-radius:9px;cursor:pointer;text-align:start}
+.rc:hover{background:var(--hover)}
+.rc.on{background:var(--accent);color:var(--bg)}
+.rc b{font-size:12px;font-weight:500;opacity:.8}
+#rcNew{margin-top:10px;flex-wrap:nowrap}
+#rcNew input{flex:1;min-width:0;font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+.rhead{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+#rcTitle{font-family:Amiri,serif;font-size:26px;font-weight:700;color:var(--accent);border:1px solid transparent;border-radius:8px;background:none;padding:2px 8px;min-width:0;flex:0 1 420px}
+#rcTitle:not([readonly]):hover,#rcTitle:focus{border-color:var(--line);outline:none}
+#rcTools[hidden]{display:none}
+.ri{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px}
+.rtxt{font-family:"Amiri Quran",Amiri,serif;font-size:22px;line-height:2.1}
+.rmeta{font-size:13px;color:var(--muted);margin:4px 0 8px}
+.rtag{color:var(--accent)}
+.rnote{width:100%;box-sizing:border-box;font:inherit;font-size:14px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);padding:8px 10px;min-height:44px;resize:vertical;margin-bottom:8px}
+.rempty{background:var(--card);border:1px dashed var(--line);border-radius:14px;padding:30px;text-align:center;color:var(--muted);line-height:2}
+.remrows{display:flex;gap:12px;flex-wrap:wrap}
+.remrow{display:flex;align-items:center;gap:8px;background:var(--bg);border-radius:12px;padding:10px 14px;font-size:14px;cursor:pointer}
+.remrow input[type=time]{font:inherit;font-size:14px;padding:3px 6px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+#remCard[hidden]{display:none}
 .rstat{max-width:720px;margin:-18px auto 22px;padding:0 16px;display:none;justify-content:center;gap:16px;font-size:13px;color:var(--muted)}
 #reader.flip .rstat{display:flex}
 /* مصحف المدينة 1441: ١٥ سطرًا، كل سطر ممتد من الحافة إلى الحافة كالمطبوع */
@@ -197,8 +246,8 @@ input[type=number]{width:70px}
 .clegend .dash{width:16px;height:0;border-top:2px dashed var(--ink);border-radius:0;padding:0;margin:0 0 0 4px;display:inline-block}
 
 /* ---------- الخريطة ---------- */
-.mapbar{max-width:1100px;margin:auto;padding:16px 16px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:center}
-#map{max-width:1100px;margin:auto;padding:20px 16px 8px;display:grid;gap:6px}
+.mapbar{max-width:1320px;margin:auto;padding:16px 16px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:center}
+#map{max-width:1320px;margin:auto;padding:20px 16px 8px;display:grid;gap:6px}
 #map.suras{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}
 #map.juz{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
 #map.pages{grid-template-columns:1fr;gap:3px}
@@ -214,8 +263,8 @@ input[type=number]{width:70px}
 #map.juz .nm{font-family:Tajawal;font-size:22px}
 .prow{display:flex;align-items:center;gap:6px}
 .prow .jl{width:24px;flex:none;text-align:center;font-size:11px;color:var(--muted)}
-.prow .ps{flex:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(30px,1fr));gap:3px}
-.prow .t{min-height:28px;padding:2px;border-radius:5px;font-size:10px}
+.prow .ps{flex:1;display:grid;grid-template-columns:repeat(23,1fr);gap:3px}   /* ٢٣ = أكثر صفحات جزء؛ فتتساوى الصفوف عرضًا */
+.prow .t{min-height:30px;padding:2px;border-radius:5px;font-size:12px}
 .prow .t:hover{transform:scale(1.15)}
 .t.picked{box-shadow:0 0 0 2.5px var(--bg),0 0 0 4.5px var(--accent)!important}
 .t.picked::before{content:"✓";position:absolute;bottom:2px;inset-inline-start:5px;font-size:11px;font-weight:700;color:var(--accent)}
@@ -224,10 +273,10 @@ input[type=number]{width:70px}
 .legend{display:flex;justify-content:center;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:13px;margin:14px 0 4px;padding:0 16px}
 #updBar{display:flex;align-items:center;justify-content:center;gap:12px;padding:8px 16px;background:color-mix(in srgb,var(--accent) 14%,var(--card));border-bottom:1px solid var(--line);font-size:14px}
 #updBar[hidden]{display:none}
-footer{max-width:1100px;margin:auto;padding:10px 16px 40px;text-align:center;color:var(--muted);font-size:12px;line-height:1.9}
-#bulk{position:fixed;bottom:0;left:0;right:0;z-index:8;background:var(--card);border-top:1px solid var(--line);box-shadow:0 -6px 24px #0002;display:none}
+footer{max-width:1320px;margin:auto;padding:10px 16px 40px;text-align:center;color:var(--muted);font-size:12px;line-height:1.9}
+#bulk{position:fixed;bottom:0;left:0;right:212px;z-index:8;background:var(--card);border-top:1px solid var(--line);box-shadow:0 -6px 24px #0002;display:none}
 #bulk.on{display:block}
-.bk{max-width:1100px;margin:auto;padding:10px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.bk{max-width:1320px;margin:auto;padding:10px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .bk .cnt{font-size:13px;color:var(--muted);flex-basis:100%}
 .bk .rg{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
 body.bulk-on{padding-bottom:130px}
@@ -266,17 +315,16 @@ body.bulk-on{padding-bottom:130px}
 </head>
 <body>
 <div id="updBar" hidden><span id="updTxt"></span><button class="btn pri" id="updNow">أعد التشغيل وحدِّث الآن</button></div>
-<header>
-  <div class="hd">
-    <h1>صاحبك القرآن</h1>
-    <div class="seg" id="tabs">
-      <button data-s="home">الرئيسية</button>
-      <button data-s="reader">المصحف</button>
-      <button data-s="wird">الورد</button>
-      <button data-s="mapScreen">الخريطة</button>
-    </div>
+<nav id="side" aria-label="الأقسام">
+  <div class="brand"><img src="electron/icon.png" alt=""><span>صاحبك القرآن</span></div>
+  <div id="tabs">
+    <button data-s="home"><i>🏠</i>الرئيسية</button>
+    <button data-s="reader"><i>📖</i>المصحف</button>
+    <button data-s="wird"><i>📅</i>الورد</button>
+    <button data-s="mapScreen"><i>🗺️</i>الخريطة</button>
+    <button data-s="refs"><i>🔖</i>المرجعيات</button>
   </div>
-</header>
+</nav>
 
 <!-- ================= الرئيسية ================= -->
 <section class="screen" id="home">
@@ -344,7 +392,9 @@ body.bulk-on{padding-bottom:130px}
     <span class="row muted" style="font-size:13px">صفحة <input type="number" id="rPage" min="1" max="604"></span>
     <button class="btn" id="fsDown" title="تصغير الخط">أ −</button>
     <button class="btn" id="fsUp" title="تكبير الخط">أ +</button>
+    <button class="btn wchip" id="wirdChip" title="العودة إلى موضع ورد القراءة"></button>
   </div>
+  <div class="recent row" id="recent"></div>
   <div class="reader">
     <button class="nav" id="pgPrev" title="الصفحة السابقة">›</button>
     <article class="mpage" id="mpage">
@@ -369,6 +419,7 @@ body.bulk-on{padding-bottom:130px}
       <button class="lnk" id="tfMore">تفاسير أخرى…</button>
     </div>
     <div class="tfb" id="tfBody"></div>
+    <div class="tfrefs" id="tfRefs"></div>
     <div class="tff row">
       <button class="btn pri" id="tfFahm"></button>
       <span class="muted" id="tfState"></span>
@@ -454,6 +505,17 @@ body.bulk-on{padding-bottom:130px}
     </div>
   </div>
 
+  <div class="card wide" id="remCard" hidden>
+    <h3>🔔 تنبيهات الأوراد</h3>
+    <div class="remrows">
+      <label class="remrow"><input type="checkbox" data-rk="read"><span>📖 ورد القراءة</span><input type="time" data-rt="read" aria-label="وقت تنبيه ورد القراءة"></label>
+      <label class="remrow"><input type="checkbox" data-rk="hifz"><span>🧠 ورد الحفظ</span><input type="time" data-rt="hifz" aria-label="وقت تنبيه ورد الحفظ"></label>
+      <label class="remrow"><input type="checkbox" data-rk="rev"><span>🔁 ورد المراجعة</span><input type="time" data-rt="rev" aria-label="وقت تنبيه ورد المراجعة"></label>
+    </div>
+    <div class="muted" style="font-size:13px;margin-top:8px">يظهر التنبيه في وقته إن لم يكتمل الورد بعد، وفيه «ابدأ الآن» و«بعد ١٥ دقيقة» و«ليس اليوم».</div>
+    <label class="row" style="margin-top:10px;font-size:14px"><input type="checkbox" id="autoStart"> شغّل «صاحبك القرآن» مع ويندوز في الخلفية ليصلك التنبيه في وقته</label>
+  </div>
+
   <div class="card wide">
     <div class="rvh">
       <h3>آخر ٣٠ يومًا</h3>
@@ -514,6 +576,28 @@ body.bulk-on{padding-bottom:130px}
     <br>نص المصحف من Quran.com · بيانات الصفحات والأجزاء من Tanzil.net · التفسير من Quran.com
   </footer>
 </section>
+
+<!-- ================= المرجعيات ================= -->
+<section class="screen" id="refs">
+ <div class="refs">
+  <aside class="rcats card">
+    <h3>التصنيفات</h3>
+    <div id="rcList"></div>
+    <form id="rcNew" class="row"><input maxlength="40" placeholder="تصنيف جديد…" aria-label="اسم تصنيف جديد"><button class="btn">إضافة</button></form>
+  </aside>
+  <div class="ritems">
+    <div class="rhead">
+      <input id="rcTitle" aria-label="اسم التصنيف" title="اضغط لإعادة التسمية">
+      <span class="muted" id="rcCount"></span>
+      <span id="rcTools"><button class="lnk" id="rcDel">حذف التصنيف</button></span>
+    </div>
+    <div id="riList"></div>
+  </div>
+ </div>
+</section>
+
+<!-- القائمة السريعة (الزر الأيمن على آية) -->
+<div id="ctx" hidden role="menu"></div>
 
 <!-- تنزيل التفاسير -->
 <div id="tfDl" class="modal">

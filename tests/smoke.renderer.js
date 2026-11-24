@@ -23,6 +23,19 @@
     checks['التفسير الميسر يظهر'] = $('tfBody').textContent.length > 40 && !$('tafsir').hidden;
     closeTafsir();
 
+    // موضع الورد لا يتحرك بالتصفّح
+    lastPage = 425; openReader(300); await wait(800);
+    checks['التصفّح لا يحرّك موضع الورد'] = lastPage === 425 && $('readSt').textContent.includes('تصفّح حر');
+
+    // المرجعيات
+    const c = addCat('اختبار'); toggleRef(start[2], c); showScreen('refs'); await wait(200);
+    checks['المرجعيات تُضاف وتُعرض'] = document.querySelectorAll('#riList .ri').length === 1;
+
+    // الخريطة: عرض الصفحات بعرض بقية العروض
+    showScreen('mapScreen'); view = 'pages'; renderMap(); await wait(200);
+    const pw = $('map').getBoundingClientRect().width; view = 'suras'; renderMap();
+    checks['عرض الصفحات بعرض الخريطة'] = Math.abs(pw - $('map').getBoundingClientRect().width) < 2;
+
     // الحفظ في الملف
     applyAct([start[114]], 1); save(); await wait(900);
     const file = qmDesktop.readData();

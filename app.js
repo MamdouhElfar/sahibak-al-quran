@@ -56,7 +56,11 @@ let backupDay = 0, backupSnooze = 0;   // يوم آخر نسخة احتياطي�
 let hifzLog = {};   // { رقم اليوم: [أرقام الآيات التي حُفظت جديدًا فيه] }
 let revLog = {};    // { رقم اليوم: عدد الآيات التي رُوجعت فيه }
 let hGoal = 5;      // آيات الحفظ الجديد يوميًا
-let hDir = 'b';     // 'b': من الناس إلى البقرة (جزء عمّ أولًا)، 'f': من الفاتحة إلى الناس
+let hDir = 'b';
+let refs = { cats: [], items: [] };
+// تنبيهات الأوراد: لكل ورد تشغيل ووقت
+const REM_DEF = { read: { on: false, time: '20:00' }, hifz: { on: false, time: '06:00' }, rev: { on: false, time: '17:00' } };
+let remind = JSON.parse(JSON.stringify(REM_DEF));   // المرجعيات: cats [{id, name}]، items [{i: الآية، c: التصنيف، note، t: اليوم}]     // 'b': من الناس إلى البقرة (جزء عمّ أولًا)، 'f': من الفاتحة إلى الناس
 
 // ---------- التحقق من صحة البيانات (للتحميل والاسترجاع) ----------
 const CYCLES = [3, 7, 14, 30, 60], WIRDS = [1, 2, 3, 4, 5, 10, 20, 40], HGOALS = [1, 2, 3, 5, 7, 10, 15, 20];
@@ -85,6 +89,24 @@ function cleanHLog(o) {
     if (day(k) === null || !Array.isArray(o[k])) continue;
     const ids = [...new Set(o[k].map(i => int(i, 0, TOTAL - 1)).filter(i => i !== null))];
     if (ids.length) out[+k] = ids;
+  }
+  return out;
+}
+function cleanRefs(o) {
+  if (!o || typeof o !== 'object' || !Array.isArray(o.cats) || !Array.isArray(o.items)) return null;
+  const cats = o.cats.filter(c => c && int(c.id, 1, 1e9) !== null && typeof c.name === 'string' && c.name.trim())
+    .map(c => ({ id: c.id, name: c.name.trim().slice(0, 40) }));
+  const ids = new Set(cats.map(c => c.id));
+  const items = o.items.filter(x => x && int(x.i, 0, TOTAL - 1) !== null && ids.has(x.c))
+    .map(x => ({ i: x.i, c: x.c, note: typeof x.note === 'string' ? x.note.slice(0, 1000) : '', t: int(x.t, 0, 1e7) ?? today() }));
+  return { cats, items };
+}
+function cleanRemind(o) {
+  if (!o || typeof o !== 'object') return null;
+  const out = {};
+  for (const k in REM_DEF) {
+    const r = o[k] || {};
+    out[k] = { on: r.on === true, time: /^([01]\d|2[0-3]):[0-5]\d$/.test(r.time) ? r.time : REM_DEF[k].time };
   }
   return out;
 }
@@ -149,6 +171,8 @@ function load() {
   revLog = read('.rlog', json, cleanRLog) ?? {};
   hGoal = read('.hgoal', str, oneOf(HGOALS)) ?? 5;
   hDir = read('.hdir', str, cleanDir) ?? 'b';
+  refs = read('.refs', json, cleanRefs) ?? { cats: [], items: [] };
+  remind = read('.remind', json, cleanRemind) ?? JSON.parse(JSON.stringify(REM_DEF));
   const t = today();
   for (let i = 0; i < TOTAL; i++) if ((state[i] & 1) && !rev[i]) rev[i] = t;
   // القيم التالفة تُحفظ كما هي قبل أن يكتب فوقها أول حفظ، لإمكان إنقاذها يدويًا
@@ -176,6 +200,8 @@ function save() {
     localStorage.setItem(KEY + '.rlog', JSON.stringify(revLog));
     localStorage.setItem(KEY + '.hgoal', hGoal);
     localStorage.setItem(KEY + '.hdir', hDir);
+    localStorage.setItem(KEY + '.refs', JSON.stringify(refs));
+    localStorage.setItem(KEY + '.remind', JSON.stringify(remind));
     deskSave();
   } catch (e) {
     if (saveFailWarned) return;
@@ -188,7 +214,7 @@ function save() {
     navigator.storage.persisted().then(p => p || navigator.storage.persist()).catch(() => {});
   }
 }
-const hasData = () => state.some(x => x) || Object.keys(readLog).length > 0 || Object.keys(revLog).length > 0;
+const hasData = () => state.some(x => x) || Object.keys(readLog).length > 0 || Object.keys(revLog).length > 0 || refs.items.length > 0;
 
 const isDue = i => (state[i] & 1) && today() - rev[i] >= cycle;
 
@@ -614,7 +640,7 @@ function onFlip() {
   if (!bookOn) return;
   const vis = visiblePages(), i = idxOf(vis[0]);
   page = vis[0];
-  if (readerMode === 'read') { lastPage = page; save(); }
+  noteVisit();
   for (let k = i - 4; k <= i + 5; k++) if (k >= 0 && k < PAGES_N) fillPage(pageAt(k));
   [Math.min(...vis) - 1, Math.max(...vis) + 1].forEach(loadQcf);
   fitBook();
@@ -636,7 +662,7 @@ function initBook() {
     width: 520, height: 820, size: 'stretch', minWidth: 240, maxWidth: 900, minHeight: 380,
     maxHeight: 2400, usePortrait: false, showCover: false,
     drawShadow: true, maxShadowOpacity: 0.35, flippingTime: 750, mobileScrollSupport: true,
-    showPageCorners: true, disableFlipByClick: true, clickEventForward: true, startPage: idxOf(page),
+    showPageCorners: false, disableFlipByClick: true, clickEventForward: true, startPage: idxOf(page),
   });
   book.loadFromHTML(bookEls);
   sizeBook();                                   // بعد التهيئة، فالمكتبة تضع max-width خاصًا بها
@@ -651,7 +677,33 @@ function updateReaderBar() {
   $('pgPrev').disabled = Math.min(...vis) === 1;
   $('pgNext').disabled = Math.max(...vis) === PAGES_N;
   $('pactLbl').textContent = vis.length > 1 ? 'هاتان الصفحتان:' : 'هذه الصفحة:';
+  $('wirdChip').textContent = `📖 موضع الورد: ص ${ar(lastPage)}`;
+  $('wirdChip').classList.toggle('here', vis.includes(lastPage));
+  drawRecent();
 }
+
+// ---------- آخر ما زرت: ثلاثة مواضع تصفّحتها خارج الورد (بقيت عليها ٤ ثوانٍ فأكثر) ----------
+let recent = [];
+try { recent = (JSON.parse(localStorage.getItem(KEY + '.recent')) || []).filter(p => int(p, 1, PAGES_N)).slice(0, 3); } catch (e) {}
+let recentT = null;
+const nearWird = p => p >= lastPage - 2 && p <= lastPage + 1;
+function noteVisit() {
+  clearTimeout(recentT);
+  const p = page;
+  recentT = setTimeout(() => {
+    if (screen !== 'reader' || page !== p || nearWird(p)) return;
+    recent = [p, ...recent.filter(x => x !== p && Math.abs(x - p) > 1)].slice(0, 3);
+    try { localStorage.setItem(KEY + '.recent', JSON.stringify(recent)); } catch (e) {}
+    deskSave(); drawRecent();
+  }, 4000);
+}
+function drawRecent() {
+  const vis = visiblePages(), list = recent.filter(p => !vis.includes(p));
+  $('recent').innerHTML = list.length ? '<span class="muted">آخر ما زرت:</span>' + list.map(p =>
+    `<button class="lnk" data-p="${p}">${SURAS[suraOf[pageB[p - 1][0]] - 1][0]} · ص ${ar(p)}</button>`).join('') : '';
+}
+$('recent').addEventListener('click', e => { const b = e.target.closest('[data-p]'); if (b) openReader(+b.dataset.p); });
+$('wirdChip').onclick = () => openReader(lastPage);
 
 // التبديل بين الكتاب والصفحة الواحدة، مع نقل حالة القراءة إلى مكانها
 function setBookMode(on) {
@@ -681,6 +733,7 @@ function renderPage() {
   updateReaderBar();
   refreshPageActions();
   startReadTimer();
+  noteVisit();
 }
 
 // آيات الصفحات الظاهرة (صفحة أو صفحتان متتاليتان)
@@ -697,7 +750,8 @@ function refreshPageActions() {
   $('mpToday').textContent = `اليوم: ${safahat(readCount(today()))}`;
 }
 
-// تُحسب كل صفحة ظاهرة مقروءةً بعد بقائها ١٥ ثانية؛ وفي العرض المزدوج تُحسب اليمنى ثم اليسرى
+// ورد القراءة يمضي من موضعه فقط: تُحسب الصفحة بعد ١٥ ثانية إن كانت صفحة الورد (lastPage) فيتقدّم الموضع صفحة؛
+// وفي العرض المزدوج تُحسب اليمنى ثم اليسرى. أما التصفّح في غير موضع الورد فلا يُحسب ولا يحرّك الموضع
 function startReadTimer() {
   clearInterval(readTimer); readTimer = null;
   const st = $('readSt');
@@ -706,22 +760,32 @@ function startReadTimer() {
     st.textContent = readerMode === 'rev' ? '🔁 جلسة مراجعة · لا تُحسب في ورد القراءة' : '🧠 جلسة حفظ · لا تُحسب في ورد القراءة';
     return;
   }
-  const two = visiblePages().length > 1;
-  const todo = visiblePages().filter(p => !readOn(today()).includes(p));
-  const done = () => { st.className = 'readst ok'; st.textContent = two ? '✓ قُرئتا اليوم' : '✓ قُرئت اليوم'; };
-  if (!todo.length) { done(); return; }
+  const vis = visiblePages();
+  const todo = vis.filter(p => p === lastPage || (p === lastPage + 1 && vis.includes(lastPage)));
+  if (!todo.length) {
+    const readHere = vis.some(p => readOn(today()).includes(p));
+    st.className = 'readst' + (readHere ? ' ok' : '');
+    st.textContent = readHere ? '✓ قُرئت اليوم ضمن الورد' : '📖 تصفّح حر · لا يُحسب في ورد القراءة';
+    return;
+  }
   if (screen !== 'reader' || document.hidden) { st.className = 'readst'; st.textContent = ''; return; }
   readLeft = DWELL;
   const tick = () => {
     if (readLeft <= 0) {
-      markRead(todo.shift()); save();
-      refreshPageActions(); dashboard();
-      if (!todo.length) { clearInterval(readTimer); readTimer = null; done(); return; }
+      const p = todo.shift();
+      markRead(p);
+      if (p === lastPage) lastPage = Math.min(PAGES_N, p + 1);   // يتقدّم موضع الورد
+      save(); refreshPageActions(); dashboard(); updateReaderBar();
+      if (!todo.length) {
+        clearInterval(readTimer); readTimer = null;
+        st.className = 'readst ok'; st.textContent = '✓ أُضيفت إلى ورد اليوم · تابع إلى ما بعدها';
+        return;
+      }
       readLeft = DWELL;
     }
     st.className = 'readst';
-    const which = !two ? 'القراءة' : todo.length > 1 ? 'الصفحة اليمنى' : 'الصفحة اليسرى';
-    st.textContent = `تُسجَّل ${which} بعد ${ar(readLeft)} ث`;
+    const which = todo.length > 1 ? 'الصفحة اليمنى' : vis.length > 1 && todo[0] === vis[1] ? 'الصفحة اليسرى' : 'الصفحة';
+    st.textContent = `تُسجَّل ${which} في ورد القراءة بعد ${ar(readLeft)} ث`;
     readLeft--;
   };
   tick();
@@ -731,7 +795,6 @@ document.addEventListener('visibilitychange', () => { if (screen === 'reader') s
 
 function openReader(p, mode = 'read') {
   readerMode = mode; page = p;
-  if (mode === 'read') { lastPage = p; save(); }
   if (screen !== 'reader') showScreen('reader'); else { renderPage(); scrollTo(0, 0); }
 }
 // d = +١ الصفحة التالية في المصحف (تُقلَّب من اليسار)، و-١ السابقة
@@ -745,7 +808,6 @@ function turn(d) {
   const p = page + d;
   if (p < 1 || p > PAGES_N) return;
   page = p;
-  if (readerMode === 'read') { lastPage = p; save(); }
   renderPage();
   // حركة تقليب: التالية تنفتح من حافتها اليمنى كورقة المصحف، والسابقة من اليسرى
   const mp = $('mpage');
@@ -763,6 +825,28 @@ addEventListener('resize', e => {
 });
 $('pgNext').onclick = () => turn(1);
 $('pgPrev').onclick = () => turn(-1);
+
+// ---------- لا تنثني الصفحة إلا بضغط مستمر أو سحب ----------
+// الضغطة القصيرة على كلمة تفتح تفسيرها فقط. نحجب ضغطة الفأرة عن مكتبة التقليب، ثم نمرّرها إليها
+// إن استمر الضغط ٣٠٠ م.ث أو تحرّكت الفأرة ١٤ بكسل (نيّة سحب الورقة)
+const HOLD_MS = 300, DRAG_PX = 14;
+let press = null;
+function startFold() {
+  if (!press || press.started) return;
+  press.started = true; clearTimeout(press.timer);
+  press.target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window, clientX: press.x, clientY: press.y, button: 0, buttons: 1 }));
+}
+document.addEventListener('mousedown', e => {
+  if (!bookOn || !e.isTrusted || !e.target.closest('#book')) return;
+  e.stopPropagation();
+  if (e.button !== 0) return;   // الزر الأيمن للقائمة السريعة فقط، لا يثني الصفحة
+  press = { x: e.clientX, y: e.clientY, target: e.target, started: false };
+  press.timer = setTimeout(startFold, HOLD_MS);
+}, true);
+document.addEventListener('mousemove', e => {
+  if (press && !press.started && Math.hypot(e.clientX - press.x, e.clientY - press.y) > DRAG_PX) startFold();
+}, true);
+document.addEventListener('mouseup', () => { if (press) { clearTimeout(press.timer); setTimeout(() => { press = null; }, 0); } }, true);
 // السحب باللمس في العرض البسيط: من اليسار إلى اليمين = الصفحة التالية (كتقليب المصحف)
 let tx = null;
 $('mpage').addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: true });
@@ -1338,6 +1422,7 @@ async function drawTafsir() {
   $('tfFahm').textContent = fahm ? 'إلغاء «فهمتُها»' : 'فهمتُ هذه الآية ✓';
   $('tfFahm').classList.toggle('pri', !fahm);
   $('tfState').textContent = fahm ? '✓ مسجّلة في «فهم»' : '';
+  drawTfRefs();
   const body = $('tfBody');
   body.innerHTML = '<span class="muted">جارٍ التحميل…</span>';
   let r = null;
@@ -1383,6 +1468,7 @@ let downXY = null;
   $(id).addEventListener('pointerup', e => {
     const w = e.target.closest('.w, .ay');
     if (!w || !downXY || Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]) > 6) return;
+    if (press && press.started) return;   // ضغط مستمر لتقليب الصفحة، لا لفتح التفسير
     openTafsir(+w.dataset.i);
   }, true);
 });
@@ -1432,6 +1518,227 @@ $('tfDlList').addEventListener('click', async e => {
 });
 
 // ======================================================================
+//  المرجعيات: آيات تجمعها في تصنيفات تسمّيها أنت (آيات الرجاء، آيات العذاب، …)
+// ======================================================================
+// تُضاف من لوحة التفسير (🔖) أو بالزر الأيمن على الآية في المصحف، وتُعرض في قسم «المرجعيات»
+const refCats = i => refs.items.filter(x => x.i === i).map(x => x.c);
+const catName = id => refs.cats.find(c => c.id === id)?.name || '';
+function toggleRef(i, c) {
+  const k = refs.items.findIndex(x => x.i === i && x.c === c);
+  if (k >= 0) refs.items.splice(k, 1); else refs.items.push({ i, c, note: '', t: today() });
+  save();
+}
+function addCat(name) {
+  name = (name || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+  if (!name) return null;
+  const ex = refs.cats.find(c => c.name === name);
+  if (ex) return ex.id;
+  const id = Math.max(0, ...refs.cats.map(c => c.id)) + 1;
+  refs.cats.push({ id, name });
+  save();
+  return id;
+}
+const ayahRef = i => `${SURAS[suraOf[i] - 1][0]} ${ar(ayahOf(i))}`;
+
+// أزرار التصنيفات لآية: المختار مُعلَّم، ومعها حقل «تصنيف جديد» (لا نستخدم prompt فهو غير متاح في التطبيق)
+function refChips(i) {
+  const on = new Set(refCats(i));
+  return refs.cats.map(c => `<button class="rchip${on.has(c.id) ? ' on' : ''}" data-cat="${c.id}">${on.has(c.id) ? '✓ ' : ''}${escHtml(c.name)}</button>`).join('') +
+    `<form class="rnew" data-i="${i}"><input maxlength="40" placeholder="+ تصنيف جديد" aria-label="اسم تصنيف جديد"></form>`;
+}
+// معالج مشترك: الضغط على تصنيف يضيف الآية إليه أو يزيلها، وإدخال اسم جديد ينشئ التصنيف ويضيفها
+function bindRefChips(box, getI, after) {
+  box.addEventListener('click', e => {
+    const b = e.target.closest('[data-cat]'); if (!b) return;
+    toggleRef(getI(), +b.dataset.cat); after();
+  });
+  box.addEventListener('submit', e => {
+    e.preventDefault();
+    const inp = e.target.querySelector('input'), id = addCat(inp.value);
+    if (id && !refCats(getI()).includes(id)) toggleRef(getI(), id);
+    after(true);
+  });
+}
+
+// ---------- في لوحة التفسير ----------
+function drawTfRefs() {
+  if (tfAyah < 0) return;
+  $('tfRefs').innerHTML = `<div class="rlbl">🔖 أضف إلى المرجعيات</div><div class="rchips">${refChips(tfAyah)}</div>`;
+}
+bindRefChips($('tfRefs'), () => tfAyah, focusNew => {
+  drawTfRefs(); if (screen === 'refs') refsScreen();
+  if (focusNew) $('tfRefs').querySelector('.rnew input').focus();
+});
+
+// ---------- القائمة السريعة بالزر الأيمن على آية ----------
+let ctxI = -1;
+function openCtx(i, x, y) {
+  ctxI = i;
+  const m = $('ctx');
+  m.innerHTML = `<div class="ch">${ayahRef(i)}</div>` +
+    `<button class="ci" data-act="tafsir">📖 تفسير الآية</button>` +
+    `<button class="ci" data-act="copy">📋 نسخ نص الآية</button>` +
+    `<div class="csep">🔖 أضف إلى المرجعيات</div><div class="rchips">${refChips(i)}</div>`;
+  m.hidden = false;
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.max(8, Math.min(x - r.width, innerWidth - r.width - 8)) + 'px';
+  m.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + 'px';
+}
+const closeCtx = () => { $('ctx').hidden = true; ctxI = -1; };
+['book', 'mtext'].forEach(id => $(id).addEventListener('contextmenu', e => {
+  const w = e.target.closest('.w, .ay'); if (!w) return;
+  e.preventDefault();
+  openCtx(+w.dataset.i, e.clientX, e.clientY);
+}));
+$('ctx').addEventListener('click', e => {
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  const i = ctxI; closeCtx();
+  if (a.dataset.act === 'tafsir') openTafsir(i);
+  else navigator.clipboard?.writeText(`${AYAT[i]} ﴿${ayahRef(i)}﴾`).catch(() => {});
+});
+bindRefChips($('ctx'), () => ctxI, focusNew => {
+  const i = ctxI, r = $('ctx').getBoundingClientRect();
+  if (tfAyah === i) drawTfRefs();
+  if (screen === 'refs') refsScreen();
+  openCtx(i, r.right, r.top);              // تُعاد القائمة مكانها لترى التغيير
+  if (focusNew) $('ctx').querySelector('.rnew input').focus();
+});
+document.addEventListener('mousedown', e => { if (!$('ctx').hidden && !e.target.closest('#ctx')) closeCtx(); }, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('ctx').hidden) closeCtx(); });
+addEventListener('blur', closeCtx);
+
+// ---------- قسم المرجعيات ----------
+let rcSel = 0;   // ٠ = كل المرجعيات
+function refsScreen() {
+  if (rcSel && !refs.cats.some(c => c.id === rcSel)) rcSel = 0;
+  const n = id => refs.items.filter(x => !id || x.c === id).length;
+  $('rcList').innerHTML = [{ id: 0, name: 'كل المرجعيات' }, ...refs.cats].map(c =>
+    `<button class="rc${c.id === rcSel ? ' on' : ''}" data-rc="${c.id}"><span>${escHtml(c.name)}</span><b>${ar(n(c.id))}</b></button>`).join('');
+  const cat = refs.cats.find(c => c.id === rcSel);
+  $('rcTitle').value = cat ? cat.name : 'كل المرجعيات';
+  $('rcTitle').readOnly = !cat;
+  $('rcTools').hidden = !cat;
+  const list = refs.items.filter(x => !rcSel || x.c === rcSel).sort((a, b) => a.i - b.i || a.c - b.c);
+  $('rcCount').textContent = list.length ? ayat(list.length) : '';
+  if (!refs.cats.length) {
+    $('riList').innerHTML = `<div class="rempty">لا توجد مرجعيات بعد.<br>اضغط على أي آية في المصحف ثم «🔖 أضف إلى المرجعيات» في لوحة التفسير، أو اضغط عليها بالزر الأيمن،
+      لتضيفها إلى تصنيف تسمّيه أنت، مثل: آيات الرجاء، آيات العذاب، آيات تستوقفني.</div>`;
+    return;
+  }
+  if (!list.length) { $('riList').innerHTML = '<div class="rempty">لا آيات في هذا التصنيف بعد.</div>'; return; }
+  $('riList').innerHTML = list.map(x => `<div class="ri" data-i="${x.i}" data-c="${x.c}">
+      <div class="rtxt">${escHtml(AYAT[x.i])} <span class="anum">﴿${ar(ayahOf(x.i))}﴾</span></div>
+      <div class="rmeta"><b>${ayahRef(x.i)}</b> · صفحة ${ar(pageOf[x.i])}${rcSel ? '' : ` · <span class="rtag">${escHtml(catName(x.c))}</span>`} · أُضيفت ${ayyam(today() - x.t)}</div>
+      <textarea class="rnote" maxlength="1000" placeholder="ما الذي استوقفك في هذه الآية؟ (اختياري)">${escHtml(x.note)}</textarea>
+      <div class="row"><button class="btn" data-go="open">افتح في المصحف</button><button class="btn" data-go="tafsir">التفسير</button><button class="lnk" data-go="del">إزالة من التصنيف</button></div>
+    </div>`).join('');
+}
+$('rcList').addEventListener('click', e => { const b = e.target.closest('[data-rc]'); if (b) { rcSel = +b.dataset.rc; refsScreen(); } });
+$('rcNew').addEventListener('submit', e => {
+  e.preventDefault();
+  const id = addCat($('rcNew').querySelector('input').value);
+  $('rcNew').querySelector('input').value = '';
+  if (id) { rcSel = id; refsScreen(); }
+});
+$('rcTitle').addEventListener('change', e => {
+  const c = refs.cats.find(c => c.id === rcSel), v = e.target.value.trim().slice(0, 40);
+  if (!c || !v || refs.cats.some(o => o.name === v && o.id !== c.id)) { refsScreen(); return; }
+  c.name = v; save(); refsScreen();
+});
+$('rcDel').onclick = () => {
+  const c = refs.cats.find(c => c.id === rcSel); if (!c) return;
+  const n = refs.items.filter(x => x.c === c.id).length;
+  if (!confirm(`حذف التصنيف «${c.name}»${n ? ` وإزالة ${ayat(n)} منه` : ''}؟ لا يمكن التراجع.`)) return;
+  refs.cats = refs.cats.filter(o => o.id !== c.id);
+  refs.items = refs.items.filter(x => x.c !== c.id);
+  rcSel = 0; save(); refsScreen();
+};
+let noteT = null;
+$('riList').addEventListener('input', e => {
+  const t = e.target.closest('.rnote'); if (!t) return;
+  const card = t.closest('.ri'), x = refs.items.find(o => o.i === +card.dataset.i && o.c === +card.dataset.c);
+  if (!x) return;
+  x.note = t.value.slice(0, 1000);
+  clearTimeout(noteT); noteT = setTimeout(save, 500);
+});
+$('riList').addEventListener('click', e => {
+  const b = e.target.closest('[data-go]'); if (!b) return;
+  const card = b.closest('.ri'), i = +card.dataset.i;
+  if (b.dataset.go === 'del') { toggleRef(i, +card.dataset.c); refsScreen(); return; }
+  openReader(pageOf[i]);
+  setTimeout(() => openTafsir(i), 350);
+});
+
+// ======================================================================
+//  تنبيهات الأوراد (في تطبيق سطح المكتب)
+// ======================================================================
+// تفحص الواجهة كل نصف دقيقة: إذا حلّ وقت ورد ولم يكتمل، تطلب من التطبيق إظهار نافذة التنبيه.
+// «بعد ١٥ دقيقة» يعيده بعدها؛ وتركه دون اختيار يعيده كذلك حتى ثلاث مرات؛ و«ليس اليوم» يوقفه لليوم
+const REM_TITLE = { read: '📖 ورد القراءة', hifz: '🧠 ورد الحفظ', rev: '🔁 ورد المراجعة' };
+let remLog = { day: 0, sent: {}, snooze: {}, auto: {} };
+try { const o = JSON.parse(localStorage.getItem(KEY + '.remlog')); if (o && o.day === today()) remLog = { sent: {}, snooze: {}, auto: {}, ...o }; } catch (e) {}
+const saveRemLog = () => { try { localStorage.setItem(KEY + '.remlog', JSON.stringify(remLog)); } catch (e) {} };
+function wirdLeft(kind) {
+  const t = today();
+  if (kind === 'read') { const n = readCount(t); return n < wird ? `بقي ${safahat(wird - n)} من وردك اليوم، تبدأ من صفحة ${ar(lastPage)}.` : null; }
+  if (kind === 'hifz') { const ids = nextHifz(hGoal - hifzCount(t)); return ids.length ? `ورد اليوم: ${describeAyat(ids)}.` : null; }
+  const ps = reviewPortion();
+  return ps.length ? `ورد اليوم: ${describePages(ps)}.` : null;
+}
+function checkReminders() {
+  if (!DESK) return;
+  const t = today(), now = new Date(), hm = now.getHours() * 60 + now.getMinutes();
+  if (remLog.day !== t) remLog = { day: t, sent: {}, snooze: {}, auto: {} };
+  for (const kind of ['hifz', 'rev', 'read']) {
+    const r = remind[kind];
+    if (!r.on) continue;
+    const [h, m] = r.time.split(':').map(Number);
+    if (hm < h * 60 + m) continue;
+    const snoozed = remLog.snooze[kind];
+    if (remLog.sent[kind] && !(snoozed && Date.now() >= snoozed)) continue;
+    remLog.sent[kind] = true; delete remLog.snooze[kind];
+    const body = wirdLeft(kind);
+    if (body) DESK.showReminder({ kind, title: REM_TITLE[kind], body });
+  }
+  saveRemLog();
+}
+function openForKind(kind) {
+  dashboard();   // يحسب مقدار الحفظ والمراجعة الحالي
+  if (kind === 'hifz' && hifzToday.length) openReader(pageOf[hifzToday[0]], 'hifz');
+  else if (kind === 'rev' && revToday.length) openReader(revToday[0], 'rev');
+  else openReader(lastPage);
+}
+if (DESK) {
+  DESK.onReminderAction(({ kind, action }) => {
+    if (action === 'snooze') remLog.snooze[kind] = Date.now() + 15 * 60000;
+    if (action === 'auto' && (remLog.auto[kind] = (remLog.auto[kind] || 0) + 1) <= 3) remLog.snooze[kind] = Date.now() + 15 * 60000;
+    if (action === 'open') openForKind(kind);
+    saveRemLog();
+  });
+  setTimeout(checkReminders, 5000);
+  setInterval(checkReminders, 30000);
+  // الإعدادات في شاشة الورد
+  $('remCard').hidden = false;
+  const drawRem = () => {
+    document.querySelectorAll('[data-rk]').forEach(c => { c.checked = remind[c.dataset.rk].on; });
+    document.querySelectorAll('[data-rt]').forEach(i => { i.value = remind[i.dataset.rt].time; i.disabled = !remind[i.dataset.rt].on; });
+  };
+  drawRem();
+  $('remCard').addEventListener('change', e => {
+    const c = e.target;
+    if (c.dataset.rk) remind[c.dataset.rk].on = c.checked;
+    else if (c.dataset.rt && /^\d\d:\d\d$/.test(c.value)) remind[c.dataset.rt].time = c.value;
+    else if (c.id === 'autoStart') { DESK.setAutostart(c.checked); return; }
+    else return;
+    // تغيير الوقت أو التشغيل يُعيد إتاحة تنبيه اليوم
+    const k = c.dataset.rk || c.dataset.rt;
+    delete remLog.sent[k]; delete remLog.snooze[k]; saveRemLog();
+    save(); drawRem();
+  });
+  $('autoStart').checked = DESK.getAutostart();
+}
+
+// ======================================================================
 //  الشاشات
 // ======================================================================
 let screen = 'home';
@@ -1447,6 +1754,7 @@ function showScreen(s) {
   else { clearInterval(readTimer); readTimer = null; }
   if (s === 'wird') wirdScreen();
   if (s === 'home') dashboard();
+  if (s === 'refs') refsScreen();
   scrollTo(0, 0);
 }
 $('tabs').addEventListener('click', e => {
@@ -1461,13 +1769,14 @@ function refreshAll() {
   blkEls.forEach((_, k) => paintBlock(k));
   dashboard(); reviewCard(); refreshBulk(); backupCard();
   if (screen === 'wird') wirdScreen();
+  if (screen === 'refs') refsScreen();
 }
 
 // ======================================================================
 //  النسخة الاحتياطية
 // ======================================================================
 function exportBackup() {
-  const data = { app: 'quran-map', v: 4, date: new Date().toISOString(), state: state.join(''), rev: [...rev], cycle, readLog, wird, lastPage, khatmaStart, hifzLog, revLog, hGoal, hDir };
+  const data = { app: 'quran-map', v: 4, date: new Date().toISOString(), state: state.join(''), rev: [...rev], cycle, readLog, wird, lastPage, khatmaStart, hifzLog, revLog, hGoal, hDir, refs };
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -1493,6 +1802,7 @@ function parseBackup(d) {
     wird: opt(d.wird, oneOf(WIRDS), wird),
     lastPage: opt(d.lastPage, v => int(v, 1, PAGES_N), 1),
     khatmaStart: opt(d.khatmaStart, day, today()),
+    refs: opt(d.refs, cleanRefs, { cats: [], items: [] }),
     hifzLog: opt(d.hifzLog, cleanHLog, {}),
     revLog: opt(d.revLog, cleanRLog, {}),
     hGoal: opt(d.hGoal, oneOf(HGOALS), hGoal),
@@ -1521,7 +1831,7 @@ $('file').onchange = async e => {
     rev[i] = d.rev[i] || 0;
     if ((state[i] & 1) && !rev[i]) rev[i] = t;
   }
-  ({ cycle, readLog, wird, lastPage, khatmaStart, hifzLog, revLog, hGoal, hDir } = d);
+  ({ cycle, readLog, wird, lastPage, khatmaStart, hifzLog, revLog, hGoal, hDir, refs } = d);
   save(); syncControls(); renderMap(); refreshAll();
 };
 
@@ -1578,4 +1888,4 @@ if (DESK) {
 setPicking(false);
 renderMap();
 backupCard();
-showScreen(['home', 'reader', 'wird', 'mapScreen'].includes(screen) ? screen : 'home');
+showScreen(['home', 'reader', 'wird', 'mapScreen', 'refs'].includes(screen) ? screen : 'home');

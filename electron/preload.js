@@ -10,4 +10,10 @@ contextBridge.exposeInMainWorld('qmDesktop', {
   logError: msg => ipcRenderer.send('log:error', String(msg).slice(0, 2000)),
   onUpdateReady: cb => ipcRenderer.on('update-ready', (e, v) => cb(v)),
   installUpdate: () => ipcRenderer.invoke('app:install-update'),
+  // التنبيهات والتشغيل مع ويندوز
+  showReminder: r => ipcRenderer.send('reminder:show', r),
+  onReminderAction: cb => ipcRenderer.on('reminder:action', (e, a) => cb(a)),
+  reminderAct: (kind, action) => ipcRenderer.send('reminder:act', kind, action),   // من نافذة التنبيه نفسها
+  getAutostart: () => ipcRenderer.sendSync('autostart:get'),
+  setAutostart: on => ipcRenderer.invoke('autostart:set', on),
 });

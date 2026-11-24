@@ -3,7 +3,9 @@
 // • البيانات: تُحفظ في localStorage كما في المتصفح، ونسخة منها في ملف data.json داخل AppData
 //   مع نسخة احتياطية تلقائية لكل يوم (آخر ٦٠ يومًا)، فلا تضيع بمسح بيانات أي متصفح
 // • التحديثات: من إصدارات GitHub (electron-updater) في النسخة المثبّتة فقط
-const { app, BrowserWindow, ipcMain, shell, Menu, nativeTheme } = require('electron');
+// • التنبيهات: إغلاق النافذة يُبقي التطبيق بجوار الساعة (Tray)، ويبدأ مع ويندوز في الخلفية،
+//   فتظهر تنبيهات الأوراد في وقتها في نافذة صغيرة فيها «ابدأ الآن» و«بعد ١٥ دقيقة» و«ليس اليوم»
+const { app, BrowserWindow, ipcMain, shell, Menu, nativeTheme, Tray, Notification, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -16,6 +18,14 @@ const DATA_FILE = path.join(USER_DIR, 'data.json');
 const BACKUP_DIR = path.join(USER_DIR, 'backups');
 const LOG_FILE = path.join(USER_DIR, 'errors.log');
 const SMOKE = process.env.QURAN_SMOKE || '';
+const START_HIDDEN = process.argv.includes('--hidden');   // عند البدء مع ويندوز
+const ICON = path.join(__dirname, 'icon.png');
+
+// إعدادات سطح المكتب (منفصلة عن بيانات الورد)
+const CONFIG_FILE = path.join(USER_DIR, 'config.json');
+let config = { autostart: true, trayHintShown: false };
+try { config = { ...config, ...JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) }; } catch { /* أول تشغيل */ }
+const saveConfig = () => { try { fs.mkdirSync(USER_DIR, { recursive: true }); fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2)); } catch (e) { logError('config', e); } };
 
 function logError(where, msg) {
   try {
@@ -30,7 +40,15 @@ process.on('unhandledRejection', e => logError('main', e && e.stack || e));
 // نافذة واحدة فقط: فتح التطبيق مرة ثانية يُظهر النافذة المفتوحة
 if (!SMOKE && !app.requestSingleInstanceLock()) app.quit();
 let win = null;
-app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
+let quitting = false;
+function showMain() {
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) { win.maximize(); win.show(); }
+  win.focus();
+}
+app.on('second-instance', showMain);
+app.on('before-quit', () => { quitting = true; });
 
 // الروابط الخارجية تُفتح في المتصفح، والتطبيق لا ينتقل خارج ملفاته
 app.on('web-contents-created', (e, wc) => {
@@ -87,8 +105,59 @@ function setupAutoUpdate() {
   const check = () => autoUpdater.checkForUpdates().catch(() => {});
   setTimeout(check, 8000);
   setInterval(check, 60 * 60 * 1000);
-  updaterInstall = () => autoUpdater.quitAndInstall(true, true);
+  updaterInstall = () => { quitting = true; autoUpdater.quitAndInstall(true, true); };
 }
+
+// ---------- التشغيل مع ويندوز ----------
+function applyAutostart() {
+  if (!app.isPackaged || SMOKE) return;
+  try { app.setLoginItemSettings({ openAtLogin: !!config.autostart, args: ['--hidden'] }); } catch (e) { logError('autostart', e); }
+}
+ipcMain.on('autostart:get', e => { e.returnValue = !!config.autostart; });
+ipcMain.handle('autostart:set', (e, on) => { config.autostart = !!on; saveConfig(); applyAutostart(); return config.autostart; });
+
+// ---------- أيقونة بجوار الساعة ----------
+let tray = null;
+function setupTray() {
+  if (SMOKE) return;
+  tray = new Tray(ICON);
+  tray.setToolTip('صاحبك القرآن');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'فتح صاحبك القرآن', click: showMain },
+    { type: 'separator' },
+    { label: 'خروج', click: () => { quitting = true; app.quit(); } },
+  ]));
+  tray.on('click', showMain);
+}
+
+// ---------- نافذة التنبيه ----------
+// تطلبها الواجهة (التي تعرف أي الأوراد لم يكتمل) عبر reminder:show، وتُعاد إليها اختيارات المستخدم
+let remWin = null;
+const remQueue = [];
+function showReminder(r) {
+  if (remWin) { remQueue.push(r); return; }
+  const wa = screen.getPrimaryDisplay().workArea, W = 400, H = 186;
+  remWin = new BrowserWindow({
+    width: W, height: H, x: wa.x + wa.width - W - 16, y: wa.y + wa.height - H - 16,
+    frame: false, resizable: false, movable: true, alwaysOnTop: true, skipTaskbar: true, show: false,
+    focusable: true, backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1f23' : '#fffdf8',
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: false },
+  });
+  remWin.loadFile(path.join(__dirname, 'reminder.html'), { query: { kind: r.kind, title: r.title, body: r.body } });
+  remWin.once('ready-to-show', () => remWin && remWin.showInactive());
+  // إن تُرك التنبيه دون اختيار يُختفي بعد دقيقتين ويُعاد بعد ١٥ دقيقة
+  const auto = setTimeout(() => act(r.kind, 'auto'), 2 * 60 * 1000);
+  const act = (kind, action) => {
+    clearTimeout(auto);
+    if (win) win.webContents.send('reminder:action', { kind, action });
+    if (action === 'open') showMain();
+    if (remWin) { remWin.destroy(); remWin = null; }
+    if (remQueue.length) setTimeout(() => showReminder(remQueue.shift()), 600);
+  };
+  remWin.__act = act;
+}
+ipcMain.on('reminder:show', (e, r) => { if (r && r.kind && !SMOKE) showReminder(r); });
+ipcMain.on('reminder:act', (e, kind, action) => { if (remWin && remWin.__act) remWin.__act(kind, action); });
 
 function createWindow() {
   win = new BrowserWindow({
@@ -101,7 +170,17 @@ function createWindow() {
   });
   Menu.setApplicationMenu(null);
   win.loadFile(path.join(__dirname, '..', 'index.html'));
-  win.once('ready-to-show', () => { if (!SMOKE) { win.maximize(); win.show(); } });
+  win.once('ready-to-show', () => { if (!SMOKE && !START_HIDDEN) { win.maximize(); win.show(); } });
+  // الإغلاق يُخفي النافذة ويُبقي التطبيق يعمل للتنبيهات؛ والخروج من أيقونة الساعة
+  win.on('close', e => {
+    if (quitting || SMOKE) return;
+    e.preventDefault();
+    win.hide();
+    if (!config.trayHintShown && Notification.isSupported()) {
+      config.trayHintShown = true; saveConfig();
+      new Notification({ title: 'صاحبك القرآن يعمل في الخلفية', body: 'ليذكّرك بأورادك في وقتها. للخروج: اضغط بالزر الأيمن على أيقونته بجوار الساعة ثم «خروج».', icon: ICON }).show();
+    }
+  });
   win.webContents.on('render-process-gone', (e, d) => logError('renderer', 'gone: ' + d.reason));
   win.webContents.on('console-message', (e, level, msg) => { if (level >= 3) logError('console', msg); });
   // اختبار الشاشة: يُشغَّل سكربت الاختبار داخل الصفحة ثم يُطبع الناتج ويُغلق التطبيق
@@ -120,5 +199,8 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(() => { createWindow(); setupAutoUpdate(); });
-app.on('window-all-closed', () => app.quit());
+app.whenReady().then(() => {
+  if (process.platform === 'win32') app.setAppUserModelId('com.elfar.sahibak');   // لظهور اسم التطبيق في إشعارات ويندوز
+  createWindow(); setupTray(); applyAutostart(); setupAutoUpdate();
+});
+app.on('window-all-closed', () => { if (SMOKE || quitting) app.quit(); });
