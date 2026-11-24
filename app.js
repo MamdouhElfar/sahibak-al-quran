@@ -1707,8 +1707,21 @@ $('ctx').addEventListener('click', e => {
   const a = e.target.closest('[data-act]'); if (!a) return;
   const i = ctxI; closeCtx();
   if (a.dataset.act === 'tafsir') openTafsir(i);
-  else navigator.clipboard?.writeText(`${AYAT[i]} ﴿${ayahRef(i)}﴾`).catch(() => {});
+  else copyText(ayahCopyText(i));
 });
+// نص الآية للنسخ: بالرسم العثماني وتشكيله كما هو، بين القوسين المزخرفين، ثم اسم السورة ورقم الآية
+const ayahCopyText = i => `﴿${AYAT[i]}﴾ [${SURAS[suraOf[i] - 1][0]}: ${ar(ayahOf(i))}]`;
+function copyText(text) {
+  const fallback = () => {
+    const t = document.createElement('textarea');
+    t.value = text; t.setAttribute('readonly', ''); t.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+    document.body.append(t); t.select();
+    try { document.execCommand('copy'); } catch {}
+    t.remove();
+  };
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).catch(fallback);
+  else fallback();
+}
 bindRefChips($('ctx'), () => ctxI, focusNew => {
   const i = ctxI, r = $('ctx').getBoundingClientRect();
   if (tfAyah === i) drawTfRefs();

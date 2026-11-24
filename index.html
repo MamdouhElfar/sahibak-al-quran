@@ -33,6 +33,9 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:Tajawal,system-ui,sans-serif}
+/* لا تحديد للنص في التطبيق؛ نسخ الآية من القائمة بالزر الأيمن. الحقول وحدها تبقى قابلة للتحديد */
+body{-webkit-user-select:none;user-select:none}
+input,textarea,select,[contenteditable]{-webkit-user-select:text;user-select:text}
 .sw{width:10px;height:10px;border-radius:50%;display:inline-block;vertical-align:middle}
 .red{color:var(--red)!important}
 .muted{color:var(--muted)}
