@@ -95,6 +95,30 @@ function cleanRLog(o) {
   return out;
 }
 
+// ---------- نسخة سطح المكتب: ملف بيانات في AppData بجانب localStorage ----------
+// إن فُقد تخزين النافذة (أول تشغيل بعد إعادة تثبيت مثلًا) تُستعاد البيانات من الملف؛ وكل حفظ يُكتب في الملف أيضًا
+const DESK = window.qmDesktop || null;
+if (DESK) {
+  try {
+    const file = DESK.readData();
+    if (file && file.keys && localStorage.getItem(KEY) === null)
+      for (const [k, v] of Object.entries(file.keys)) if (k.startsWith('quranMap') && typeof v === 'string') localStorage.setItem(k, v);
+  } catch (e) { DESK.logError('restore: ' + e); }
+  addEventListener('error', e => DESK.logError(`${e.message} @${e.filename}:${e.lineno}`));
+}
+function deskSnapshot() {
+  const keys = {};
+  try { Object.keys(localStorage).forEach(k => { if (k.startsWith('quranMap') && !k.includes('.rescue')) keys[k] = localStorage.getItem(k); }); } catch (e) {}
+  return JSON.stringify({ app: 'quran-map', v: 1, saved: new Date().toISOString(), keys });
+}
+let deskT = null;
+function deskSave() {
+  if (!DESK) return;
+  clearTimeout(deskT);
+  deskT = setTimeout(() => { deskT = null; DESK.writeData(deskSnapshot()); }, 400);
+}
+if (DESK) addEventListener('beforeunload', () => { if (deskT) { clearTimeout(deskT); DESK.writeDataSync(deskSnapshot()); } });
+
 // ---------- التحميل: كل مفتاح مستقل، فلا يُسقط التالفُ منها الباقي ----------
 function load() {
   const bad = {};
@@ -152,6 +176,7 @@ function save() {
     localStorage.setItem(KEY + '.rlog', JSON.stringify(revLog));
     localStorage.setItem(KEY + '.hgoal', hGoal);
     localStorage.setItem(KEY + '.hdir', hDir);
+    deskSave();
   } catch (e) {
     if (saveFailWarned) return;
     saveFailWarned = true;
@@ -448,14 +473,18 @@ $('rSura').onchange = e => { if (e.target.value) openReader(pageOf[start[+e.targ
 $('rJuz').onchange = e => { if (e.target.value) openReader(pageOf[juzB[+e.target.value - 1][0]]); e.target.value = ''; };
 $('rPage').onchange = e => openReader(Math.min(PAGES_N, Math.max(1, +e.target.value || 1)));
 document.documentElement.style.setProperty('--qfs', fontSize + 'px');
-const setFs = d => { fontSize = Math.min(40, Math.max(18, fontSize + d)); document.documentElement.style.setProperty('--qfs', fontSize + 'px'); save(); };
+const setFs = d => {
+  fontSize = Math.min(40, Math.max(18, fontSize + d));
+  document.documentElement.style.setProperty('--qfs', fontSize + 'px'); save();
+  if (book) { sizeBook(); window.dispatchEvent(new Event('resize')); }
+};
 $('fsUp').onclick = () => setFs(2);
 $('fsDown').onclick = () => setFs(-2);
 
 // ---------- رسم مصحف المدينة (طبعة 1441) سطرًا بسطر بخطوط مجمع الملك فهد (QPC V2) ----------
-// لكل صفحة خط خاص يُحمَّل عند فتحها ويحفظه المتصفح؛ وإن تعذّر التحميل يُعرض النص العادي
+// لكل صفحة خط خاص يُحمَّل من مجلد التطبيق عند فتحها؛ وإن تعذّر التحميل يُعرض النص العادي
 const HAS_M = typeof M1441 !== 'undefined';
-const QCF_URL = p => `https://static.qurancdn.com/fonts/quran/hafs/v2/woff2/p${p}.woff2`;
+const QCF_URL = p => `fonts/qcf/p${p}.woff2`;   // مضمّنة في التطبيق (tools/fetch_fonts.py)
 const qcfLoads = {};
 function loadQcf(p) {
   if (!(p >= 1 && p <= PAGES_N)) return Promise.resolve(false);
@@ -593,6 +622,11 @@ function onFlip() {
   refreshPageActions();
   startReadTimer();
 }
+// عرض الكتاب بحيث تتسع الصفحة كاملةً لارتفاع النافذة (نسبة الصفحة ٥٢٠:٨٢٠)
+function sizeBook() {
+  const h = Math.max(420, innerHeight - 200) * fontSize / 26;   // أ− وأ+ تصغّر الكتاب وتكبّره
+  $('book').style.maxWidth = Math.round(2 * h * 520 / 820) + 'px';
+}
 function initBook() {
   const host = $('book');
   host.innerHTML = Array.from({ length: PAGES_N }, () => '<div class="fp"></div>').join('');
@@ -600,11 +634,13 @@ function initBook() {
   setBookMode(true);
   book = new St.PageFlip(host, {
     width: 520, height: 820, size: 'stretch', minWidth: 240, maxWidth: 900, minHeight: 380,
-    maxHeight: Math.max(480, innerHeight - 150), usePortrait: false, showCover: false,
+    maxHeight: 2400, usePortrait: false, showCover: false,
     drawShadow: true, maxShadowOpacity: 0.35, flippingTime: 750, mobileScrollSupport: true,
     showPageCorners: true, disableFlipByClick: true, clickEventForward: true, startPage: idxOf(page),
   });
   book.loadFromHTML(bookEls);
+  sizeBook();                                   // بعد التهيئة، فالمكتبة تضع max-width خاصًا بها
+  window.dispatchEvent(new Event('resize'));    // لتعيد المكتبة حساب المقاس
   book.on('flip', onFlip);
   book.on('changeOrientation', () => { filled.clear(); onFlip(); });
   new ResizeObserver(() => fitBook()).observe(host);
@@ -721,6 +757,7 @@ function turn(d) {
 let rzT = null;
 addEventListener('resize', e => {
   if (!e.isTrusted || screen !== 'reader' || !FLIP) return;
+  if (book) sizeBook();   // يسبق معالج المكتبة لأنه سُجّل قبلها
   clearTimeout(rzT);
   rzT = setTimeout(() => { if (wideEnough() !== bookOn) renderPage(); }, 150);
 });
@@ -1491,8 +1528,10 @@ $('file').onchange = async e => {
 // ---------- تذكير النسخة الاحتياطية ----------
 function backupCard() {
   const t = today(), since = t - backupDay;
-  const need = hasData() && since >= 7 && t - backupSnooze >= 3;
+  // نسخة سطح المكتب تحفظ نسخة احتياطية تلقائية كل يوم، فلا حاجة إلى التذكير
+  const need = !DESK && hasData() && since >= 7 && t - backupSnooze >= 3;
   $('bkCard').hidden = !need;
+  if (DESK) { $('bkInfo').textContent = ''; return; }
   $('bkWhen').textContent = backupDay ? `آخر نسخة احتياطية حفظتها كانت ${ayyam(since)}.` : 'لم تحفظ أي نسخة احتياطية بعد.';
   $('bkInfo').textContent = backupDay ? `(آخر نسخة: ${ayyam(since)})` : '';
 }
@@ -1523,6 +1562,18 @@ function checkDay() {
 }
 setInterval(checkDay, 60e3);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkDay(); });
+
+// ---------- سطح المكتب: النسخ التلقائية والتحديثات ----------
+if (DESK) {
+  $('deskBk').hidden = false;
+  $('openBk').onclick = () => DESK.openBackups();
+  $('appVer').textContent = `الإصدار ${DESK.version}`;
+  DESK.onUpdateReady(v => {
+    $('updTxt').textContent = `تحديث جديد (${v}) جاهز، ويُثبَّت تلقائيًا عند إغلاق التطبيق.`;
+    $('updBar').hidden = false;
+  });
+  $('updNow').onclick = () => { deskSave(); if (deskT) { clearTimeout(deskT); DESK.writeDataSync(deskSnapshot()); } DESK.installUpdate(); };
+}
 
 setPicking(false);
 renderMap();

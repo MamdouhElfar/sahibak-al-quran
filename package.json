@@ -1,0 +1,51 @@
+{
+  "name": "quran-map",
+  "productName": "Quran Map",
+  "version": "1.0.0",
+  "description": "خريطة المصحف: تتبّع حفظك وفهمك وقراءتك ومراجعتك للقرآن الكريم، مع مصحف المدينة (طبعة 1441) والتفسير",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "web": "python -m http.server 8765",
+    "icon": "node tools/make-icon.js",
+    "smoke": "node tests/smoke.js",
+    "dist": "node tests/smoke.js && electron-builder --win nsis --publish never",
+    "release": "node tests/smoke.js && electron-builder --win nsis --publish always"
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "author": "Mamdouh Elfar",
+  "dependencies": {
+    "electron-updater": "^6.8.11"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.elfar.quranmap",
+    "productName": "Quran Map",
+    "copyright": "Mamdouh Elfar",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": [
+      "index.html", "app.js", "data.js", "quran-text.js", "mushaf-1441.js", "tafsir-muyassar.js",
+      "fonts/**/*", "vendor/**/*", "electron/**/*", "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png",
+      "artifactName": "Quran-Map-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Quran Map",
+      "uninstallDisplayName": "Quran Map",
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": [{ "provider": "github", "owner": "MamdouhElfar", "repo": "quran-map", "releaseType": "release" }]
+  }
+}

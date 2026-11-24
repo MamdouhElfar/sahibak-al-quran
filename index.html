@@ -4,8 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>خريطة المصحف</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Amiri+Quran&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="fonts/ui.css" rel="stylesheet">
 <style>
 :root{
   --bg:#f7f4ec; --card:#fffdf8; --ink:#2b2a26; --muted:#7f796d; --line:#e8e2d4; --hover:#efe9db;
@@ -125,9 +124,9 @@ input[type=number]{width:70px}
 .basm{text-align:center;text-align-last:center;display:block;margin-bottom:2px}
 /* المصحف كتابًا يُقلَّب */
 #reader:not(.flip) #book{display:none!important}   /* المكتبة تضع display وminWidth مباشرةً على العنصر */
-#reader.flip #book{display:block;flex:1;min-width:0}
+#reader.flip #book{display:block;flex:1;min-width:0;margin:0 auto}
 #reader.flip .mpage{display:none}
-#reader.flip .reader{max-width:calc(var(--qfs,26px) * 44 + 120px);align-items:center}
+#reader.flip .reader{max-width:none;align-items:center;justify-content:center}
 #reader.flip .nav{align-self:stretch}
 .fp{background:var(--page);overflow:hidden}
 .fpi{height:100%;display:flex;flex-direction:column;padding:12px 4% 8px;box-sizing:border-box;
@@ -223,6 +222,8 @@ input[type=number]{width:70px}
 .prow .t.picked::before,.prow .t.full::after{display:none}
 #map.picking{-webkit-user-select:none;user-select:none}
 .legend{display:flex;justify-content:center;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:13px;margin:14px 0 4px;padding:0 16px}
+#updBar{display:flex;align-items:center;justify-content:center;gap:12px;padding:8px 16px;background:color-mix(in srgb,var(--accent) 14%,var(--card));border-bottom:1px solid var(--line);font-size:14px}
+#updBar[hidden]{display:none}
 footer{max-width:1100px;margin:auto;padding:10px 16px 40px;text-align:center;color:var(--muted);font-size:12px;line-height:1.9}
 #bulk{position:fixed;bottom:0;left:0;right:0;z-index:8;background:var(--card);border-top:1px solid var(--line);box-shadow:0 -6px 24px #0002;display:none}
 #bulk.on{display:block}
@@ -264,6 +265,7 @@ body.bulk-on{padding-bottom:130px}
 </style>
 </head>
 <body>
+<div id="updBar" hidden><span id="updTxt"></span><button class="btn pri" id="updNow">أعد التشغيل وحدِّث الآن</button></div>
 <header>
   <div class="hd">
     <h1>خريطة المصحف</h1>
@@ -507,6 +509,7 @@ body.bulk-on{padding-bottom:130px}
   <footer>
     اضغط على أي سورة أو صفحة أو جزء لتسجيل آياتها. ما تسجّله هنا يُعدّ محفوظًا سابقًا؛ أما الحفظ الجديد فسجّله من «خطة اليوم» أو من المصحف ليُحسب في وردك. بياناتك محفوظة على جهازك فقط —
     <button class="lnk" id="exp">حفظ نسخة احتياطية</button><span id="bkInfo"></span>·<button class="lnk" id="imp">استرجاع نسخة</button>
+    <span id="deskBk" hidden>· تُحفظ نسخة احتياطية تلقائيًا كل يوم — <button class="lnk" id="openBk">فتح مجلدها</button> · <span id="appVer"></span></span>
     <input type="file" id="file" accept=".json" hidden>
     <br>نص المصحف من Quran.com · بيانات الصفحات والأجزاء من Tanzil.net · التفسير من Quran.com
   </footer>
@@ -571,9 +574,8 @@ body.bulk-on{padding-bottom:130px}
 <script src="data.js"></script>
 <script src="quran-text.js"></script>
 <script src="mushaf-1441.js"></script>
-<!-- StPageFlip 2.0.7 (MIT): تقليب الصفحات؛ إن تعذّر تحميلها يعمل المصحف صفحةً صفحة دون حركة -->
-<script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"
-  integrity="sha384-L4eWrYFdqQ+LoGA0MMuqLqzV13x7SKkQaqacy4MED8e815dS37tTKlO/6xBEUpZW" crossorigin="anonymous"></script>
+<!-- StPageFlip 2.0.7 (MIT، انظر vendor/page-flip.LICENSE): تقليب الصفحات؛ إن تعذّر تحميلها يعمل المصحف صفحةً صفحة -->
+<script src="vendor/page-flip.browser.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
