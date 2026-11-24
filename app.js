@@ -911,6 +911,7 @@ const dayDate = d => new Date(d * 864e5);   // UTC بالضبط عند منتص�
 const dayLabel = d => { const x = dayDate(d); return `${DAYS[x.getUTCDay()]} ${ar(x.getUTCDate())}/${ar(x.getUTCMonth() + 1)}`; };
 
 function wirdScreen() {
+  planCard();   // يحسب مقدار الحفظ والمراجعة اليوم (hifzToday وrevToday)
   const t = today(), n = readCount(t), p = Math.min(1, n / wird);
   $('wToday').innerHTML =
     `<div class="wbig">${ar(n)} <small>من ${safahat(wird)}</small></div>` +
@@ -919,14 +920,17 @@ function wirdScreen() {
   $('wPlan').textContent = `بهذا الورد تختم القرآن كل ${ayyamN(Math.ceil(PAGES_N / wird))} تقريبًا.`;
   $('wContinue').textContent = `متابعة القراءة من صفحة ${ar(lastPage)}`;
 
-  // الختمة
-  const kp = khatmaPages().size, last7 = [...Array(7)].reduce((s, _, k) => s + readCount(t - k), 0) / 7;
-  const rate = last7 > 0 ? last7 : wird, left = PAGES_N - kp;
+  // الختمة: المدة المتوقعة بوردك المختار؛ ومعها معدلك الفعلي منذ بدء الختمة (آخر ٧ أيام منها) بعد ثلاثة أيام على الأقل
+  const kp = khatmaPages().size, left = PAGES_N - kp;
+  const kDays = Math.max(1, Math.min(7, t - khatmaStart + 1));
+  let kRead = 0; for (let k = 0; k < kDays; k++) kRead += readCount(t - k);
+  const avg = kRead / kDays;
   $('wKhatma').innerHTML =
-    `<div class="wbig">${pct(kp, PAGES_N)} <small>${ar(kp)} من ${ar(PAGES_N)} صفحة</small></div>` +
+    `<div class="wbig">${pct(kp, PAGES_N)} <small>${ar(kp)} من ${ar(PAGES_N)} صفحة · بقي ${safahat(left)}</small></div>` +
     `<div class="prog"><span style="width:${kp / PAGES_N * 100}%;background:var(--both)"></span></div>` +
     `<div style="font-size:14px">${left === 0 ? '<span class="done-msg">🎉 أتممتَ الختمة، تقبّل الله منك</span>'
-      : `${last7 > 0 ? 'بمعدلك الحالي' : 'بوردك الحالي'} تُتمّ الختمة خلال ${ayyamN(Math.ceil(left / rate))} تقريبًا`}</div>` +
+      : `بوردك (${safahat(wird)} يوميًا) تُتمّ الختمة خلال ${ayyamN(Math.ceil(left / wird))} تقريبًا` +
+        (kDays >= 3 && avg > 0 ? ` · وبمعدلك الفعلي (${ar(+avg.toFixed(1))} يوميًا) خلال ${ayyamN(Math.ceil(left / avg))}` : '')}</div>` +
     `<div class="muted" style="font-size:12px;margin-top:4px">بدأت هذه الختمة ${ayyam(t - khatmaStart)}</div>`;
 
   // ورد الحفظ: الموضع والمقدار والمدة المتوقعة
@@ -939,8 +943,10 @@ function wirdScreen() {
       `<div class="prog"><span style="width:${Math.min(1, hn / hGoal) * 100}%;background:var(--hifz)"></span></div>` +
       `<div style="font-size:14px">موضعك في الحفظ: <b style="font-family:Amiri,serif;font-size:16px">${describeAyat([nx])}</b></div>` +
       `<div class="muted" style="font-size:13px;margin-top:4px">بقي ${ayat(hLeft)} · ` +
-      (h7 > 0 ? `بمعدلك في آخر أسبوع تُتمّ الحفظ خلال ${duration(Math.ceil(hLeft / h7))}` : `بهذا الورد تُتمّ الحفظ خلال ${duration(Math.ceil(hLeft / hGoal))}`) + ' تقريبًا</div>'
+      (h7 > 0 ? `بمعدلك في آخر أسبوع تُتمّ الحفظ خلال ${duration(Math.ceil(hLeft / h7))}` : `بهذا الورد تُتمّ الحفظ خلال ${duration(Math.ceil(hLeft / hGoal))}`) + ' تقريبًا</div>' +
+      `<div class="wportion">${hifzToday.length ? `ورد اليوم: <span class="tgt">${describeAyat(hifzToday)}</span>` : '<span class="done-msg">أتممتَ ورد الحفظ اليوم ✓</span>'}</div>`
     : '<div class="done-msg">🎉 أتممتَ حفظ القرآن الكريم، تقبّل الله منك</div>';
+  $('wHifzOpen').disabled = $('wHifzDone').disabled = !hifzToday.length;
 
   // ورد المراجعة
   const q = revQuota(), vn = revCount(t);
@@ -948,8 +954,10 @@ function wirdScreen() {
     ? `<div class="wbig">${ar(vn)} <small>من ${ayat(q)} اليوم</small></div>` +
       `<div class="prog"><span style="width:${Math.min(1, vn / q) * 100}%;background:var(--both)"></span></div>` +
       `<div style="font-size:14px">${all.d ? `<b class="red">${ayat(all.d)}</b> مستحقة للمراجعة الآن` : 'لا مراجعة مستحقة الآن ✓'}</div>` +
-      `<div class="muted" style="font-size:13px;margin-top:4px">مقدار المراجعة اليومي = محفوظك (${ayat(all.h)}) ÷ ${ayyamN(cycle)}</div>`
+      `<div class="muted" style="font-size:13px;margin-top:4px">مقدار المراجعة اليومي = محفوظك (${ayat(all.h)}) ÷ ${ayyamN(cycle)}</div>` +
+      (revToday.length ? `<div class="wportion">ورد اليوم: <span class="tgt">${describePages(revToday)}</span></div>` : '')
     : '<div class="muted" style="font-size:14px">سجّل محفوظك من الخريطة ليُحسب ورد المراجعة اليومي تلقائيًا.</div>';
+  $('wRevOpen').disabled = $('wRevDone').disabled = !revToday.length;
 
   metricPanel();
 }
@@ -1023,6 +1031,48 @@ $('chart').addEventListener('pointermove', e => {
   showTip(e, `${dayLabel(d)}: ${c ? m.unit(c) : 'لا شيء'}${goal && c >= goal ? ' ✓' : ''}`);
 });
 $('chart').addEventListener('pointerleave', () => tip.style.display = 'none');
+
+// أزرار الحفظ والمراجعة في شاشة الورد = أزرار «خطة اليوم» نفسها
+$('wHifzOpen').onclick = () => $('hHifzOpen').click();
+$('wHifzDone').onclick = () => $('hHifzDone').click();
+$('wRevOpen').onclick = () => $('hRevOpen').click();
+$('wRevDone').onclick = () => $('hRevDone').click();
+
+// تسجيل حفظ يدوي: آيات من سورة تُعدّ حفظًا جديدًا اليوم
+const suraOpts = SURAS.map((x, k) => `<option value="${k + 1}">${ar(k + 1)}. ${x[0]}</option>`).join('');
+$('hlSura').innerHTML = suraOpts;
+$('rlSura').innerHTML += suraOpts;
+$('hlSura').onchange = () => { const n = SURAS[+$('hlSura').value - 1][1]; $('hlFrom').max = $('hlTo').max = n; $('hlFrom').value = 1; $('hlTo').value = n; };
+$('hlSura').onchange();
+$('hlLog').onclick = () => {
+  const s = +$('hlSura').value, n = SURAS[s - 1][1];
+  const a = int($('hlFrom').value, 1, n), b = int($('hlTo').value || $('hlFrom').value, 1, n);
+  if (!a || !b) { $('hlMsg').textContent = `أدخل أرقام آيات بين ١ و${ar(n)}`; return; }
+  const ids = [];
+  for (let i = start[s] + Math.min(a, b) - 1; i <= start[s] + Math.max(a, b) - 1; i++) if (!(state[i] & 1)) ids.push(i);
+  if (!ids.length) { $('hlMsg').textContent = 'هذه الآيات محفوظة من قبل'; return; }
+  applyAct(ids, 1); save(); refreshAll();
+  $('hlMsg').textContent = `سُجّلت ${ayat(ids.length)} حفظًا جديدًا اليوم ✓`;
+};
+// تسجيل مراجعة يدوية: سورة أو نطاق صفحات
+$('rlSura').onchange = () => {
+  const s = +$('rlSura').value; if (!s) return;
+  $('rlFrom').value = pageOf[start[s]]; $('rlTo').value = pageOf[start[s] + SURAS[s - 1][1] - 1];
+};
+$('rlFrom').oninput = $('rlTo').oninput = () => { $('rlSura').value = ''; };   // كتابة الصفحات تلغي اختيار السورة
+$('rlLog').onclick = () => {
+  const s = +$('rlSura').value;
+  let ids = [];
+  if (s) { for (let i = start[s]; i < start[s] + SURAS[s - 1][1]; i++) ids.push(i); }
+  else {
+    const a = int($('rlFrom').value, 1, PAGES_N), b = int($('rlTo').value || $('rlFrom').value, 1, PAGES_N);
+    if (!a || !b) { $('rlMsg').textContent = 'اختر سورة أو أدخل أرقام صفحات بين ١ و٦٠٤'; return; }
+    const ps = []; for (let p = Math.min(a, b); p <= Math.max(a, b); p++) ps.push(p);
+    ids = pageAyat(ps);
+  }
+  const n = applyReview(ids); save(); refreshAll();
+  $('rlMsg').textContent = n ? `سُجّلت مراجعة ${ayat(n)} ✓` : 'لا محفوظ هنا لم يُراجَع اليوم';
+};
 
 $('mLog').onclick = () => {
   const a = +$('mFrom').value, b = +$('mTo').value || a;

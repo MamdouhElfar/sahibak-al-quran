@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <title>شعار صاحبُك القرآن</title>
 <!-- شعار التطبيق (التصميم «د»: رقعة مائلة، «القرآن» أعلى و«صاحبُك» أسفل، على كريمي بإطار ذهبي)
-     بمقاس ٥١٢ = تصميم لوحة التصميم (٣٦٠) × ١٫٤٢٢؛ يرسمه tools/render-icon.js إلى PNG -->
+     بمقاس ٥١٢ = تصميم لوحة التصميم (٣٦٠) × ١٫٤٢٢؛ يرسمه tools/render-icon.js إلى PNG وICO.
+     صنف small: نسخة المقاسات الصغيرة (١٦–٦٤ بكسل: شريط المهام والساعة): حروف أكبر تملأ البلاطة، وألوان أعمق، وإطار أسمك -->
 <link href="../fonts/ui.css" rel="stylesheet">
 <style>
 html,body{margin:0;background:transparent}
@@ -14,6 +15,12 @@ html,body{margin:0;background:transparent}
 .q{top:-10px;left:4px;font-size:156px;color:#1f5e4a}
 .s{bottom:21px;right:-14px;font-size:185px;color:#b8901a}
 .dot{position:absolute;top:321px;left:11px;width:16px;height:16px;background:#b8901a;transform:rotate(45deg)}
+/* المقاسات الصغيرة */
+.small .tile{border-radius:96px;border-width:22px;border-color:#a87d12;background:#fdf8ea}
+.small .box{left:0;top:50px;width:512px;height:400px}
+.small .q{top:-14px;left:14px;font-size:178px;color:#14402f}
+.small .s{bottom:30px;right:10px;font-size:204px;color:#9a7412}
+.small .dot{display:none}
 </style>
 </head>
 <body>

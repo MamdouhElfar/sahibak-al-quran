@@ -1,7 +1,7 @@
 {
   "name": "sahibak-al-quran",
   "productName": "صاحبُك القرآن",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "صاحبُك القرآن: تتبّع حفظك وفهمك وقراءتك ومراجعتك للقرآن الكريم، مع مصحف المدينة (طبعة 1441) والتفسير",
   "main": "electron/main.js",
   "scripts": {
@@ -44,7 +44,7 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "build/icon.png",
+      "icon": "build/icon.ico",
       "artifactName": "Sahibak-Al-Quran-Setup-${version}.${ext}"
     },
     "nsis": {

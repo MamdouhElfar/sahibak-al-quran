@@ -152,7 +152,7 @@ ipcMain.handle('tray:set', (e, on) => { config.keepInTray = !!on; saveConfig(); 
 let tray = null;
 function setupTray() {
   if (SMOKE) return;
-  tray = new Tray(path.join(__dirname, 'tray.png'));
+  tray = new Tray(path.join(__dirname, 'icon.ico'));
   tray.setToolTip('صاحبُك القرآن');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'فتح صاحبُك القرآن', click: showMain },
@@ -197,7 +197,7 @@ function createWindow() {
     width: 1360, height: 900, minWidth: 980, minHeight: 680,
     title: 'صاحبُك القرآن', show: false, autoHideMenuBar: true,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#131518' : '#f7f4ec',
-    icon: path.join(__dirname, 'icon.png'),
+    icon: path.join(__dirname, 'icon.ico'),   // كل المقاسات؛ الصغيرة منها مبسّطة لشريط المهام
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false, spellcheck: false,
       backgroundThrottling: !SMOKE },   // في الاختبار تبقى النافذة مخفية فلا نبطّئ مؤقّتاتها
   });
