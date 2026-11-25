@@ -1,5 +1,5 @@
 // صاحبُك القرآن (كان اسمه «خريطة المصحف»)
-// • لكل آية حالة: bit1 = حفظ، bit2 = فهم (3 = كلاهما) + يوم آخر مراجعة للمحفوظ
+// • لكل آية حالة: bit1 = حفظ، bit2 = قرأ تفسيرها (3 = كلاهما) + يوم آخر مراجعة للمحفوظ
 // • سجل القراءة اليومي: { رقم اليوم: [أرقام الصفحات] } + الورد اليومي + موضع الوقوف + بداية الختمة
 const TOTAL = 6236, PAGES_N = 604;
 const KEY = 'quranMap.v1';
@@ -50,6 +50,11 @@ const GROUPS = {
 const today = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 6e4) / 864e5);
 const state = new Uint8Array(TOTAL);
 const rev = new Int32Array(TOTAL);
+// يوم قراءة تفسير الآية (للعلامة bit2): يبهت لونها تدريجيًا خلال سنة، دعوةً إلى تجديد قراءته لا واجبًا
+const tfd = new Int32Array(TOTAL);
+const TF_FADE = 365;
+const tfAge = i => (state[i] & 2) && tfd[i] ? today() - tfd[i] : 0;
+const tfFade = i => Math.min(1, tfAge(i) / TF_FADE);   // ٠ حديث … ١ مضت عليه سنة
 let cycle = 14, readLog = {}, wird = 5, lastPage = 1, khatmaStart = today(), fontSize = 26;
 let khatmaPre = 0;   // صفحات قُرئت من الختمة الحالية قبل بدء التتبّع (١ … khatmaPre)
 let dwell = 15;
@@ -176,6 +181,8 @@ function load() {
   const str = x => x, json = JSON.parse;
   const s = read('', str, cleanState);
   state.fill(0); if (s) for (let i = 0; i < TOTAL; i++) state[i] = +s[i];
+  const td = read('.tfd', json, cleanRev);
+  tfd.fill(0); if (td) td.forEach((d, i) => tfd[i] = d);
   const r = read('.rev', json, cleanRev);
   rev.fill(0); if (r) r.forEach((d, i) => rev[i] = d);
   cycle = read('.cycle', str, oneOf(CYCLES)) ?? 14;
@@ -203,7 +210,10 @@ function load() {
   const iv = read('.ivl', str, cleanIvl);
   ivl.fill(0); if (iv) for (let i = 0; i < TOTAL; i++) ivl[i] = +iv[i];
   const t = today();
-  for (let i = 0; i < TOTAL; i++) if ((state[i] & 1) && !rev[i]) rev[i] = t;
+  for (let i = 0; i < TOTAL; i++) {
+    if ((state[i] & 1) && !rev[i]) rev[i] = t;
+    if ((state[i] & 2) && !tfd[i]) tfd[i] = t;   // ما سُجّل قبل حفظ التاريخ يُعدّ من اليوم
+  }
   // القيم التالفة تُحفظ كما هي قبل أن يكتب فوقها أول حفظ، لإمكان إنقاذها يدويًا
   if (Object.keys(bad).length) {
     try { localStorage.setItem(`${KEY}.rescue.${Date.now()}`, JSON.stringify(bad)); } catch (e) {}
@@ -238,6 +248,7 @@ function save() {
     localStorage.setItem(KEY + '.rmode', readMode);
     localStorage.setItem(KEY + '.lastAyah', lastAyah);
     localStorage.setItem(KEY + '.ivl', ivl.join(''));
+    localStorage.setItem(KEY + '.tfd', JSON.stringify([...tfd]));
     deskSave();
   } catch (e) {
     if (saveFailWarned) return;
@@ -417,8 +428,8 @@ function duration(d) {
 //  الرئيسية
 // ======================================================================
 const SEGS = [   // ترتيب الحلقة مقصود: الأحمر ليس بجوار الأخضر (متحقق لعمى الألوان)
-  { key: 'both', label: 'حفظ وفهم', c: 'var(--c-both)' },
-  { key: 'fahm', label: 'فهم فقط', c: 'var(--c-fahm)' },
+  { key: 'both', label: 'حفظ وتفسير', c: 'var(--c-both)' },
+  { key: 'fahm', label: 'تفسير فقط', c: 'var(--c-fahm)' },
   { key: 'hifz', label: 'حفظ فقط', c: 'var(--c-hifz)' },
   { key: 'due',  label: 'محفوظ ويحتاج إلى مراجعة', c: 'var(--c-due)' },
   { key: 'none', label: 'لم يبدأ بعد', c: 'var(--c-none)' },
@@ -447,14 +458,14 @@ function dashboard() {
   $('donut').innerHTML = arcs + labels +
     `<text x="${cx}" y="${cy - 14}" text-anchor="middle" font-size="22" style="font-family:Amiri;fill:var(--accent)" font-weight="700">القرآن الكريم</text>` +
     `<text x="${cx}" y="${cy + 18}" text-anchor="middle" font-size="26" font-weight="700">${pct(v.both, TOTAL)}</text>` +
-    `<text x="${cx}" y="${cy + 38}" text-anchor="middle" font-size="12" style="fill:var(--muted)">حفظ وفهم</text>`;
+    `<text x="${cx}" y="${cy + 38}" text-anchor="middle" font-size="12" style="fill:var(--muted)">حفظ وتفسير</text>`;
   $('plegend').innerHTML = SEGS.map(s =>
     `<tr><td><i class="sw" style="background:${s.c}"></i> ${s.label}</td><td>${ayat(v[s.key])}</td><td>${pct(v[s.key], TOTAL)}</td></tr>`).join('');
 
   const all = count(0, TOTAL - 1);
   $('kpis').innerHTML =
     `<div class="kpi"><div class="v">${pct(all.h, TOTAL)}</div><div class="l"><i class="sw" style="background:var(--hifz)"></i> حفظ · ${ayat(all.h)}</div></div>` +
-    `<div class="kpi"><div class="v">${pct(all.f, TOTAL)}</div><div class="l"><i class="sw" style="background:var(--fahm)"></i> فهم · ${ayat(all.f)}</div></div>` +
+    `<div class="kpi"><div class="v">${pct(all.f, TOTAL)}</div><div class="l"><i class="sw" style="background:var(--fahm)"></i> تفسير · ${ayat(all.f)}</div></div>` +
     `<div class="kpi"><div class="v">${pct(all.b, TOTAL)}</div><div class="l"><i class="sw" style="background:var(--both)"></i> كلاهما · ${ayat(all.b)}</div></div>`;
   const act = $('act'), gapDays = today() - all.latest;
   if (!all.h) { act.className = 'act'; act.innerHTML = 'لم تسجّل أي محفوظ بعد — ابدأ من الخريطة 🌱'; }
@@ -486,7 +497,11 @@ let hifzToday = [], revToday = [];
 const numTxt = n => ar(Number.isInteger(n) ? n : Math.round(n * 10) / 10);
 const revRule = h => hasCustomIvl() ? `مراجعة ${ayat(h)} كلٌّ في موعده` : `مراجعة ${ayat(h)} ${cycleName(cycle)}`;
 // موضع ورد القراءة: «صفحة ٤٣٥»، أو «سورة فاطر (ص ٤٣٤)» إن انتهى الورد السابق عند نهاية سورة
-const wirdPosTxt = () => lastAyah >= 0 ? `سورة ${SURAS[suraOf[lastAyah] - 1][0]} (ص ${ar(lastPage)})` : `صفحة ${ar(lastPage)}`;
+const wirdPosTxt = () => lastAyah >= 0 ? `${posName(lastAyah)} (ص ${ar(lastPage)})` : `صفحة ${ar(lastPage)}`;
+// «سورة فاطر» إن بدأ الورد بأول سورة، وإلا «فاطر ١٢»
+const posName = i => ayahOf(i) === 1 ? `سورة ${SURAS[suraOf[i] - 1][0]}` : `${SURAS[suraOf[i] - 1][0]} ${ar(ayahOf(i))}`;
+// «نهاية سورة سبإ» أو «الآية ١١ من سورة فاطر» (الآية التي قبل موضع الورد)
+const stopName = i => ayahOf(i) === 1 ? `نهاية سورة ${SURAS[suraOf[i] - 2][0]}` : `الآية ${ar(ayahOf(i - 1))} من سورة ${SURAS[suraOf[i - 1] - 1][0]}`;
 function planRow(id, m, goal, detail, done) {
   const el = $(id), n = m.n(today());
   el.querySelector('.pv').innerHTML = goal ? `<b>${numTxt(n)}</b> / ${m.unit(goal)}` : '';
@@ -548,6 +563,7 @@ $('donut').addEventListener('pointerleave', () => tip.style.display = 'none');
 // ---------- المراجعة ----------
 function reviewCard() {
   const all = count(0, TOTAL - 1);
+  $('review').hidden = !all.d;   // لا تظهر البطاقة إلا إن كان هناك ما يحتاج إلى مراجعة
   if (!all.h) {
     $('rvSummary').textContent = 'بمجرد أن تسجّل محفوظك ستظهر هنا المواضع التي تحتاج إلى مراجعة.';
     $('rvList').innerHTML = '';
@@ -706,6 +722,25 @@ function relayoutReader() {
   if (screen === 'reader' && FLIP && wantBook() !== bookOn) renderPage();
   else window.dispatchEvent(new Event('resize'));
 }
+// فتح لوحة التفسير أو إغلاقها: تتغير المساحة فورًا، ثم تنتقل الصفحة بحركة ناعمة من مكانها القديم إلى الجديد
+// (نقيس موضعها قبل التغيير وبعده، ونبدأ الحركة من الفرق بينهما)
+function slideReader(change) {
+  const el = bookOn ? $('book') : $('mpage'), wasBook = bookOn;
+  const a = screen === 'reader' ? el.getBoundingClientRect() : null;
+  change();
+  if (!a || !a.width || bookOn !== wasBook || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const b = el.getBoundingClientRect();
+  if (!b.width || (Math.abs(a.left - b.left) < 1 && Math.abs(a.width - b.width) < 1)) return;
+  el.style.transition = 'none';
+  el.style.transformOrigin = '0 0';
+  el.style.transform = `translate(${a.left - b.left}px, ${a.top - b.top}px) scale(${a.width / b.width})`;
+  void el.offsetWidth;
+  el.style.transition = 'transform .34s cubic-bezier(.2,.8,.3,1)';
+  el.style.transform = '';
+  $('reader').classList.add('sliding');   // لا قصّ أثناء الحركة
+  clearTimeout(el._slideT);
+  el._slideT = setTimeout(() => { el.style.transition = el.style.transformOrigin = ''; $('reader').classList.remove('sliding'); }, 380);
+}
 const filled = new Map();   // رقم الصفحة ← نسخة الرسم التي رُسمت بها
 let paintVer = 0;           // يزيد عند تغيّر الحالة فيُعاد رسم الصفحات
 
@@ -782,15 +817,14 @@ function updateReaderBar() {
   $('rPage').value = page;
   $('pgPrev').disabled = Math.min(...vis) === 1;
   $('pgNext').disabled = Math.max(...vis) === PAGES_N;
-  $('pactLbl').textContent = vis.length > 1 ? 'هاتان الصفحتان:' : 'هذه الصفحة:';
-  $('wirdChip').textContent = `📖 موضع الورد: ${lastAyah >= 0 ? `${SURAS[suraOf[lastAyah] - 1][0]} · ` : ''}ص ${ar(lastPage)}`;
+  $('wirdChip').textContent = `📖 موضع الورد: ${lastAyah >= 0 ? `${posName(lastAyah).replace('سورة ', '')} · ` : ''}ص ${ar(lastPage)}`;
   $('wirdChip').classList.toggle('here', vis.includes(lastPage));
   $('recentBtn').disabled = !recent.length;
 }
 
-// ---------- آخر ما زرت: مواضع تصفّحتها خارج الورد (بقيت عليها ٤ ثوانٍ فأكثر) ----------
-// [{p: الصفحة، t: وقت الزيارة}] الأحدث أولًا؛ تُعرض في قائمة من زر «آخر ما زرت» وفي قسم المرجعيات
-const RECENT_N = 10;
+// ---------- آخر ما قرأت: آخر ثلاثة مواضع قرأتها خارج الورد (بقيت عليها ١٠ ثوانٍ فأكثر) ----------
+// [{p: الصفحة، t: وقت الزيارة}] الأحدث أولًا؛ تُعرض في قائمة من زر «آخر ما قرأت» وفي قسم المرجعيات
+const RECENT_N = 3;   // آخر ثلاثة مواضع فقط
 let recent = [];
 try {
   recent = (JSON.parse(localStorage.getItem(KEY + '.recent')) || [])
@@ -808,7 +842,7 @@ function noteVisit() {
     try { localStorage.setItem(KEY + '.recent', JSON.stringify(recent)); } catch (e) {}
     deskSave(); updateReaderBar();
     if (screen === 'refs') refsScreen();
-  }, 4000);
+  }, 10000);   // عشر ثوانٍ على الصفحة = قراءة لا مرور
 }
 // «قبل ٥ دقائق»، «قبل ٣ ساعات»، «أمس» …
 function agoTxt(ms) {
@@ -824,7 +858,7 @@ function agoTxt(ms) {
 const pageSura = p => SURAS[suraOf[pageB[p - 1][0]] - 1][0];
 function recentPop() {
   const pop = $('recentPop');
-  pop.innerHTML = '<div class="ph2">🕘 آخر ما زرت</div>' + recent.map(x =>
+  pop.innerHTML = '<div class="ph2">🕘 آخر ما قرأت</div>' + recent.map(x =>
     `<button class="ri2" data-p="${x.p}"><b>${pageSura(x.p)}</b><span>ص ${ar(x.p)} · الجزء ${ar(juzOf[pageB[x.p - 1][0]])}</span><em>${agoTxt(x.t)}</em></button>`).join('') +
     '<button class="lnk" data-goto2="refs">عرضها في المرجعيات</button>';
   pop.hidden = false;
@@ -880,10 +914,6 @@ function visibleAyat() {
   return ids;
 }
 function refreshPageActions() {
-  const ids = visibleAyat(), c = count(ids[0], ids[ids.length - 1]);
-  document.querySelector('[data-pact="1"]').lastChild.textContent = c.h === c.n ? 'إلغاء الحفظ' : 'حفظ';
-  document.querySelector('[data-pact="2"]').lastChild.textContent = c.f === c.n ? 'إلغاء الفهم' : 'فهم';
-  $('pRev').disabled = !c.h;
   $('mpToday').textContent = `اليوم: ${safahat(readCount(today()))}`;
 }
 
@@ -903,11 +933,20 @@ function surahStops(p) {
   return out;
 }
 const prevSura = i => SURAS[suraOf[i] - 2][0];
+// «انتهى وردي عند هذه الآية» (من القائمة بالزر الأيمن): متاح للآيات حول موضع الورد فقط، لا في التصفّح البعيد
+const canEndAt = i => readerMode === 'read' && i < TOTAL - 1 && pageOf[i] >= lastPage - 1 && pageOf[i] <= lastPage + 1 && !(lastAyah >= 0 && i < lastAyah && !stoppedToday());
+function endWirdAt(i) {
+  const p = pageOf[i], nx = i + 1;
+  for (let q = Math.min(lastPage, p); q <= p; q++) if (q >= lastPage || q === p) markRead(q);   // صفحات الورد حتى هذه الآية
+  lastPage = pageOf[nx];
+  lastAyah = pageB[lastPage - 1][0] === nx ? -1 : nx;   // آخر آية في الصفحة = حدّ صفحة عادي
+  afterReadChange(true);
+}
 function readCell(p, todo) {
   const done = readOn(today()).includes(p);
   let main, extra = '';
   if (stoppedToday() && p === lastPage) {
-    main = `<span class="ok">✓ انتهى ورد اليوم عند نهاية سورة ${prevSura(lastAyah)}</span>`;
+    main = `<span class="ok">✓ انتهى ورد اليوم عند ${stopName(lastAyah)}</span>`;
     extra = '<button class="lnk" data-rd="unstop">بل أتممتُ الصفحة كلها</button>';
   } else if (todo.includes(p)) {
     main = readMode === 'manual'
@@ -1062,10 +1101,6 @@ $('book').addEventListener('pointerover', e => {
   if (w) w.closest('.mtext').querySelectorAll(`.w[data-i="${w.dataset.i}"]`).forEach(x => x.classList.add('hov'));
 });
 
-document.querySelectorAll('[data-pact]').forEach(b => b.onclick = () => {
-  applyAct(visibleAyat(), +b.dataset.pact); save(); refreshAll(); renderPage();
-});
-$('pRev').onclick = () => { applyReview(visibleAyat()); save(); refreshAll(); renderPage(); };
 $('pOpen').onclick = () => openGroup('pages', page - 1);
 ['hContinue', 'wContinue'].forEach(id => $(id).onclick = () => openReader(lastPage));
 
@@ -1317,18 +1352,19 @@ function renderMap() {
   document.querySelectorAll('#views button').forEach(b => b.classList.toggle('on', b.dataset.v === view));
   refreshAll();
 }
-// تمتلئ البطاقة من الأسفل: ذهبي (حفظ وفهم) ← أزرق (حفظ) ← أحمر (يحتاج إلى مراجعة) ← أخضر (فهم)
+// تمتلئ البطاقة من الأسفل: ذهبي (حفظ وتفسير) ← أزرق (حفظ) ← أحمر (يحتاج إلى مراجعة) ← أخضر (تفسير، يبهت إن قَدُم)
 function paintBlock(k) {
   const g = GROUPS[view][k];
-  let gold = 0, blue = 0, red = 0, green = 0;
+  let gold = 0, blue = 0, red = 0, green = 0, fade = 0;
   for (let i = g.from; i <= g.to; i++) {
     const s = state[i];
     if (s & 1) { if (isDue(i)) red++; else if (s === 3) gold++; else blue++; }
-    else if (s === 2) green++;
+    else if (s === 2) { green++; fade += tfFade(i); }
   }
+  const tfC = green ? `color-mix(in srgb, var(--tf) ${Math.round(100 - 60 * fade / green)}%, var(--tile))` : 'var(--tf)';
   const n = g.to - g.from + 1, p1 = gold / n * 100, p2 = p1 + blue / n * 100, p3 = p2 + red / n * 100, p4 = p3 + green / n * 100;
   blkEls[k].style.background = p4 === 0 ? '' :
-    `linear-gradient(to top, var(--tb) 0 ${p1}%, var(--th) ${p1}% ${p2}%, var(--tr) ${p2}% ${p3}%, var(--tf) ${p3}% ${p4}%, var(--tile) ${p4}%)`;
+    `linear-gradient(to top, var(--tb) 0 ${p1}%, var(--th) ${p1}% ${p2}%, var(--tr) ${p2}% ${p3}%, ${tfC} ${p3}% ${p4}%, var(--tile) ${p4}%)`;
   blkEls[k].classList.toggle('full', gold === n);
 }
 $('views').addEventListener('click', e => {
@@ -1369,7 +1405,7 @@ function refreshBulk() {
   document.querySelectorAll('[data-bact]').forEach(b => b.disabled = !n);
   const all = bit => ids.length && ids.every(i => state[i] & bit);
   document.querySelector('[data-bact="1"]').lastChild.textContent = all(1) ? 'إلغاء الحفظ' : 'حفظ';
-  document.querySelector('[data-bact="2"]').lastChild.textContent = all(2) ? 'إلغاء الفهم' : 'فهم';
+  document.querySelector('[data-bact="2"]').lastChild.textContent = all(2) ? 'إلغاء التفسير' : 'قرأتُ التفسير';
   $('bRev').disabled = !ids.some(i => state[i] & 1);
   drawIvlSel($('bIvl'), ids);
   $('bClear').disabled = !n;
@@ -1445,10 +1481,11 @@ function applyAct(ids, act) {
   const t = today(), fresh = screen !== 'mapScreen';
   const todayH = new Set(hifzLog[t] || []);
   ids.forEach(i => {
-    const was = state[i] & 1;
+    const was = state[i] & 1, was2 = state[i] & 2;
     state[i] = op(state[i]);
     if (!(state[i] & 1)) { rev[i] = 0; ivl[i] = 0; todayH.delete(i); }
     else if (!was) { rev[i] = t; if (fresh) todayH.add(i); }
+    if (!(state[i] & 2)) tfd[i] = 0; else if (!was2) tfd[i] = t;
   });
   if (todayH.size) hifzLog[t] = [...todayH]; else delete hifzLog[t];
 }
@@ -1484,7 +1521,7 @@ mapEl.addEventListener('pointermove', e => {
   const b = e.target.closest('.t');
   if (!b) { tip.style.display = 'none'; return; }
   const g = GROUPS[view][+b.dataset.g], c = count(g.from, g.to);
-  showTip(e, `${g.title} · حفظ ${pct(c.h, c.n)} · فهم ${pct(c.f, c.n)}` + (c.d ? ` · ${ayat(c.d)} تحتاج إلى مراجعة` : ''));
+  showTip(e, `${g.title} · حفظ ${pct(c.h, c.n)} · تفسير ${pct(c.f, c.n)}` + (c.d ? ` · ${ayat(c.d)} تحتاج إلى مراجعة` : ''));
 });
 mapEl.addEventListener('pointerleave', () => tip.style.display = 'none');
 
@@ -1528,20 +1565,22 @@ function refreshSheet() {
   const g = GROUPS[sView][cur], c = count(g.from, g.to), t = today();
   $('gStats').innerHTML =
     `<span><i class="sw" style="background:var(--hifz)"></i> حفظ ${ar(c.h)} / ${ar(c.n)}</span>` +
-    `<span><i class="sw" style="background:var(--fahm)"></i> فهم ${ar(c.f)} / ${ar(c.n)}</span>` +
+    `<span><i class="sw" style="background:var(--fahm)"></i> تفسير ${ar(c.f)} / ${ar(c.n)}</span>` +
     `<span><i class="sw" style="background:var(--both)"></i> كلاهما ${ar(c.b)} / ${ar(c.n)}</span>` +
     (c.h ? `<span class="${c.d ? 'red' : ''}">🔁 ${c.d ? `${ayat(c.d)} تحتاج إلى مراجعة` : 'مُراجَعة'} · آخر مراجعة: ${ayyam(t - c.latest)}</span>` : '');
   for (let i = g.from; i <= g.to; i++) {
     const el = aEls[i];
     el.className = `a s${state[i]}${isDue(i) ? ' due' : ''}${sel.has(i) ? ' sel' : ''}`;
-    el.title = `${SURAS[suraOf[i] - 1][0]} ${ar(ayahOf(i))}` + ((state[i] & 1) ? ` · آخر مراجعة: ${ayyam(t - rev[i])}` + (ivl[i] ? ` · تُراجَع ${cycleName(RCYC[ivl[i]])}` : '') : '');
+    el.style.background = state[i] === 2 && tfFade(i) > 0.05 ? `color-mix(in srgb, var(--fahm) ${Math.round(100 - 60 * tfFade(i))}%, var(--none))` : '';
+    el.title = `${SURAS[suraOf[i] - 1][0]} ${ar(ayahOf(i))}` + ((state[i] & 1) ? ` · آخر مراجعة: ${ayyam(t - rev[i])}` + (ivl[i] ? ` · تُراجَع ${cycleName(RCYC[ivl[i]])}` : '') : '') +
+      ((state[i] & 2) ? ` · قرأتَ تفسيرها ${ayyam(tfAge(i))}` : '');
   }
   const n = sel.size, ids = [...sel];
   $('cnt').textContent = n ? `المحدد: ${ayat(n)}` : 'حدّد آيات لتسجيلها';
   const all = bit => n && ids.every(i => state[i] & bit);
   document.querySelectorAll('[data-act]').forEach(b => b.disabled = !n);
   document.querySelector('[data-act="1"]').lastChild.textContent = all(1) ? 'إلغاء الحفظ' : 'حفظ';
-  document.querySelector('[data-act="2"]').lastChild.textContent = all(2) ? 'إلغاء الفهم' : 'فهم';
+  document.querySelector('[data-act="2"]').lastChild.textContent = all(2) ? 'إلغاء التفسير' : 'قرأتُ التفسير';
   $('revBtn').disabled = !ids.some(i => state[i] & 1);
   drawIvlSel($('sIvl'), ids);
   $('sTafsir').hidden = n !== 1;   // تفسير آية واحدة محددة داخل التطبيق
@@ -1698,8 +1737,7 @@ function openTafsir(i) {
   if (!tfIsOpen()) {
     $('tfPanel').classList.add('open');           // تنزلق اللوحة من اليسار
     $('tfPanel').setAttribute('aria-hidden', 'false');
-    $('reader').classList.add('tf-open');
-    relayoutReader();   // ليُعاد حساب مقاس الكتاب بجوار اللوحة
+    slideReader(() => { $('reader').classList.add('tf-open'); relayoutReader(); });   // ليُعاد حساب مقاس الكتاب بجوار اللوحة
   }
   drawTafsir();
 }
@@ -1707,10 +1745,9 @@ const tfIsOpen = () => $('tfPanel').classList.contains('open');
 function closeTafsir() {
   $('tfPanel').classList.remove('open');
   $('tfPanel').setAttribute('aria-hidden', 'true');
-  $('reader').classList.remove('tf-open');
   tfStyle.textContent = '';
   tfAyah = -1;
-  relayoutReader();
+  slideReader(() => { $('reader').classList.remove('tf-open'); relayoutReader(); });
 }
 let tfSeq = 0;
 async function drawTafsir() {
@@ -1724,10 +1761,10 @@ async function drawTafsir() {
   $('tfSel').innerHTML = TAFASIR.filter(t => t.builtin || [...tfHave].some(k => k.startsWith(t.id + ':')))
     .map(t => `<option value="${t.id}"${t.id === tfId ? ' selected' : ''}>${t.name}</option>`).join('');
   if (!$('tfSel').value) $('tfSel').value = tfId = 16;
-  const fahm = (state[i] & 2) !== 0;
-  $('tfFahm').textContent = fahm ? 'إلغاء «فهمتُها»' : 'فهمتُ هذه الآية ✓';
-  $('tfFahm').classList.toggle('pri', !fahm);
-  $('tfState').textContent = fahm ? '✓ مسجّلة في «فهم»' : '';
+  const fahm = (state[i] & 2) !== 0, age = tfAge(i), old = fahm && age >= TF_FADE;
+  $('tfFahm').textContent = !fahm ? 'قرأتُ تفسير هذه الآية ✓' : old ? 'قرأتُه مجددًا ✓' : 'إلغاء «قرأتُ التفسير»';
+  $('tfFahm').classList.toggle('pri', !fahm || old);
+  $('tfState').textContent = fahm ? `✓ قرأتَ تفسيرها ${ayyam(age)}${old ? ' · لعلّك تجدّد العهد به' : ''}` : '';
   drawTfRefs();
   const body = $('tfBody');
   body.innerHTML = '<span class="muted">جارٍ التحميل…</span>';
@@ -1763,7 +1800,9 @@ $('tfSel').onchange = e => {
 };
 $('tfFahm').onclick = () => {
   if (tfAyah < 0) return;
-  applyAct([tfAyah], 2); save(); refreshAll(); refreshPageActions(); drawTafsir();
+  if ((state[tfAyah] & 2) && tfAge(tfAyah) >= TF_FADE) tfd[tfAyah] = today();   // تجديد القراءة
+  else applyAct([tfAyah], 2);
+  save(); refreshAll(); refreshPageActions(); drawTafsir();
 };
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && tfIsOpen() && cur < 0) closeTafsir(); });
 
@@ -1881,9 +1920,16 @@ let ctxI = -1;
 function openCtx(i, x, y) {
   ctxI = i;
   const m = $('ctx');
+  const h = state[i] & 1, f = state[i] & 2, t = today();
   m.innerHTML = `<div class="ch">${ayahRef(i)}</div>` +
     `<button class="ci" data-act="tafsir">📖 تفسير الآية</button>` +
     `<button class="ci" data-act="copy">📋 نسخ نص الآية</button>` +
+    '<div class="csep">هذه الآية</div>' +
+    `<button class="ci" data-act="hifz"><i class="sw" style="background:var(--hifz)"></i> ${h ? 'إلغاء الحفظ' : 'حفظتُها'}</button>` +
+    (h ? `<button class="ci" data-act="rev"${rev[i] === t ? ' disabled' : ''}>🔁 ${rev[i] === t ? 'رُوجعت اليوم ✓' : 'راجعتُها اليوم'}</button>` : '') +
+    `<button class="ci" data-act="fahm"><i class="sw" style="background:var(--fahm)"></i> ${f ? (tfAge(i) >= TF_FADE ? 'قرأتُ تفسيرها مجددًا' : 'إلغاء «قرأتُ التفسير»') : 'قرأتُ تفسيرها'}</button>` +
+    (canEndAt(i) ? `<button class="ci" data-act="end">🏁 انتهى وردي عند هذه الآية</button>` : '') +
+    '<button class="ci" data-act="page">📋 تفاصيل الصفحة وآياتها</button>' +
     `<div class="csep">🔖 أضف إلى المرجعيات</div><div class="rchips">${refChips(i)}</div>`;
   m.hidden = false;
   const r = m.getBoundingClientRect();
@@ -1913,9 +1959,15 @@ $('tfPanel').addEventListener('contextmenu', e => {
 $('ctx').addEventListener('click', e => {
   const a = e.target.closest('[data-act]'); if (!a) return;
   const i = ctxI; closeCtx();
-  if (a.dataset.act === 'copySel') copyText(ctxText);
-  else if (a.dataset.act === 'tafsir') openTafsir(i);
-  else copyText(ayahCopyText(i));
+  const act = a.dataset.act, after = () => { save(); refreshAll(); renderPage(); if (tfAyah === i) drawTafsir(); };
+  if (act === 'copySel') copyText(ctxText);
+  else if (act === 'tafsir') openTafsir(i);
+  else if (act === 'copy') copyText(ayahCopyText(i));
+  else if (act === 'hifz') { applyAct([i], 1); after(); }
+  else if (act === 'rev') { applyReview([i]); after(); }
+  else if (act === 'fahm') { if ((state[i] & 2) && tfAge(i) >= TF_FADE) tfd[i] = today(); else applyAct([i], 2); after(); }
+  else if (act === 'end') endWirdAt(i);
+  else if (act === 'page') openGroup('pages', pageOf[i] - 1);
 });
 // نص الآية للنسخ: بالرسم العثماني وتشكيله كما هو، بين القوسين المزخرفين، ثم اسم السورة ورقم الآية
 const ayahCopyText = i => `﴿${AYAT[i]}﴾ [${SURAS[suraOf[i] - 1][0]}: ${ar(ayahOf(i))}]`;
@@ -1942,13 +1994,13 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('ctx').
 addEventListener('blur', closeCtx);
 
 // ---------- قسم المرجعيات ----------
-let rcSel = 0;   // ٠ = كل المرجعيات، -١ = آخر ما زرت
+let rcSel = 0;   // ٠ = كل المرجعيات، -١ = آخر ما قرأت
 function refsScreen() {
   if (rcSel > 0 && !refs.cats.some(c => c.id === rcSel)) rcSel = 0;
   const n = id => refs.items.filter(x => !id || x.c === id).length;
   $('rcList').innerHTML = [{ id: 0, name: 'كل المرجعيات' }, ...refs.cats].map(c =>
     `<button class="rc${c.id === rcSel ? ' on' : ''}" data-rc="${c.id}"><span>${escHtml(c.name)}</span><b>${ar(n(c.id))}</b></button>`).join('') +
-    `<div class="rcsep"></div><button class="rc${rcSel === -1 ? ' on' : ''}" data-rc="-1"><span>🕘 آخر ما زرت</span><b>${ar(recent.length)}</b></button>`;
+    `<div class="rcsep"></div><button class="rc${rcSel === -1 ? ' on' : ''}" data-rc="-1"><span>🕘 آخر ما قرأت</span><b>${ar(recent.length)}</b></button>`;
   if (rcSel === -1) { recentList(); return; }
   const cat = refs.cats.find(c => c.id === rcSel);
   $('rcTitle').value = cat ? cat.name : 'كل المرجعيات';
@@ -1969,11 +2021,11 @@ function refsScreen() {
       <div class="row"><button class="btn" data-go="open">افتح في المصحف</button><button class="btn" data-go="tafsir">التفسير</button><button class="lnk" data-go="del">إزالة من التصنيف</button></div>
     </div>`).join('');
 }
-// آخر ما زرت: مجمّعة بحسب اليوم، ولكل موضع سورته وجزؤه وأول آية في صفحته
+// آخر ما قرأت: مجمّعة بحسب اليوم، ولكل موضع سورته وجزؤه وأول آية في صفحته
 function recentList() {
-  $('rcTitle').value = '🕘 آخر ما زرت'; $('rcTitle').readOnly = true; $('rcTools').hidden = true;
-  $('rcCount').textContent = recent.length ? `آخر ${safahat(recent.length)} تصفّحتها خارج الورد` : '';
-  if (!recent.length) { $('riList').innerHTML = '<div class="rempty">لم تتصفّح شيئًا خارج وردك بعد.<br>كل صفحة تبقى عليها في المصحف أربع ثوانٍ فأكثر بعيدًا عن موضع الورد تظهر هنا.</div>'; return; }
+  $('rcTitle').value = '🕘 آخر ما قرأت'; $('rcTitle').readOnly = true; $('rcTools').hidden = true;
+  $('rcCount').textContent = recent.length ? `آخر ${safahat(recent.length)} قرأتها خارج الورد` : '';
+  if (!recent.length) { $('riList').innerHTML = '<div class="rempty">لم تقرأ شيئًا خارج وردك بعد.<br>كل صفحة تبقى عليها في المصحف عشر ثوانٍ فأكثر بعيدًا عن موضع الورد تظهر هنا (آخر ثلاثة مواضع).</div>'; return; }
   let html = '', lastG = null;
   recent.forEach(x => {
     const d = x.t ? today() - Math.floor((x.t - new Date(x.t).getTimezoneOffset() * 6e4) / 864e5) : null;
@@ -1993,7 +2045,7 @@ $('riList').addEventListener('click', e => {
   const p = +b.closest('[data-p]')?.dataset.p;
   if (b.dataset.gp === 'open') { openReader(p); return; }
   if (b.dataset.gp === 'del') recent = recent.filter(x => x.p !== p);
-  if (b.dataset.gp === 'clear') { if (!confirm('مسح قائمة «آخر ما زرت» كلها؟')) return; recent = []; }
+  if (b.dataset.gp === 'clear') { if (!confirm('مسح قائمة «آخر ما قرأت» كلها؟')) return; recent = []; }
   try { localStorage.setItem(KEY + '.recent', JSON.stringify(recent)); } catch (err) {}
   deskSave(); refsScreen();
 });
@@ -2158,8 +2210,12 @@ $('remAdd').onclick = () => {
 // ======================================================================
 let screen = 'home';
 try { screen = localStorage.getItem(KEY + '.screen') || 'home'; } catch (e) {}
+let prevScreen = 'home';
 function showScreen(s) {
+  if (s === 'settings' && screen !== 'settings') prevScreen = screen;
   screen = s;
+  document.body.classList.toggle('in-settings', s === 'settings');   // أقسام الإعدادات مكان أقسام التطبيق في الشريط الجانبي
+  $('setTabs').hidden = s !== 'settings';
   try { localStorage.setItem(KEY + '.screen', s); } catch (e) {}
   document.querySelectorAll('.screen').forEach(el => el.classList.toggle('on', el.id === s));
   document.querySelectorAll('#tabs button, #tabs2 button').forEach(b => b.classList.toggle('on', b.dataset.s === s));
@@ -2180,7 +2236,7 @@ $('tabs').addEventListener('click', e => {
   showScreen(b.dataset.s);
 });
 $('tabs2').addEventListener('click', e => { const b = e.target.closest('button'); if (b) showScreen(b.dataset.s); });
-document.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => showScreen(b.dataset.goto));
+document.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => { if (b.dataset.gsec) setSec = b.dataset.gsec; showScreen(b.dataset.goto); });
 
 function refreshAll() {
   blkEls.forEach((_, k) => paintBlock(k));
@@ -2193,7 +2249,7 @@ function refreshAll() {
 //  النسخة الاحتياطية
 // ======================================================================
 function exportBackup() {
-  const data = { app: 'quran-map', v: 4, date: new Date().toISOString(), state: state.join(''), rev: [...rev], cycle, readLog, wird, lastPage, khatmaStart, khatmaPre, hifzLog, revLog, hGoal, hDir, refs, lastAyah, ivl: ivl.join(''), hUnit, hGoalP };
+  const data = { app: 'quran-map', v: 4, date: new Date().toISOString(), state: state.join(''), rev: [...rev], cycle, readLog, wird, lastPage, khatmaStart, khatmaPre, hifzLog, revLog, hGoal, hDir, refs, lastAyah, ivl: ivl.join(''), hUnit, hGoalP, tfd: [...tfd] };
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -2229,6 +2285,7 @@ function parseBackup(d) {
     ivl: opt(d.ivl, cleanIvl, '0'.repeat(TOTAL)),
     hUnit: opt(d.hUnit, v => v === 'a' || v === 'p' ? v : null, hUnit),
     hGoalP: opt(d.hGoalP, oneOf(HGOALPS), hGoalP),
+    tfd: opt(d.tfd, cleanRev, []),
   };
   if (Object.values(out).includes(null)) return null;
   out.date = typeof d.date === 'string' ? d.date : null;
@@ -2246,12 +2303,13 @@ $('file').onchange = async e => {
   for (const c of d.state) { if (c & 1) h++; if (c & 2) fh++; }
   const pages = Object.values(d.readLog).reduce((n, p) => n + p.length, 0);
   const when = d.date && !isNaN(new Date(d.date)) ? new Date(d.date).toLocaleDateString('ar-EG') : 'غير معروف';
-  if (!confirm(`نسخة بتاريخ ${when}:\n• الحفظ: ${ayat(h)}\n• الفهم: ${ayat(fh)}\n• سجل القراءة: ${safahat(pages)}\n\nسيُستبدل تقدّمك الحالي بهذه النسخة. هل تريد المتابعة؟`)) return;
+  if (!confirm(`نسخة بتاريخ ${when}:\n• الحفظ: ${ayat(h)}\n• قراءة التفسير: ${ayat(fh)}\n• سجل القراءة: ${safahat(pages)}\n\nسيُستبدل تقدّمك الحالي بهذه النسخة. هل تريد المتابعة؟`)) return;
   const t = today();
   for (let i = 0; i < TOTAL; i++) {
     state[i] = +d.state[i];
-    rev[i] = d.rev[i] || 0; ivl[i] = +d.ivl[i];
+    rev[i] = d.rev[i] || 0; ivl[i] = +d.ivl[i]; tfd[i] = d.tfd[i] || 0;
     if ((state[i] & 1) && !rev[i]) rev[i] = t;
+    if ((state[i] & 2) && !tfd[i]) tfd[i] = t;
   }
   ({ cycle, readLog, wird, lastPage, lastAyah, khatmaStart, khatmaPre, hifzLog, revLog, hGoal, hDir, refs, hUnit, hGoalP } = d);
   if (lastAyah >= 0 && pageOf[lastAyah] !== lastPage) lastAyah = -1;
@@ -2341,7 +2399,21 @@ function drawUpd(u) {
   $('updInstall').hidden = u.status !== 'ready';
   $('updCheck').disabled = ['checking', 'downloading', 'dev'].includes(u.status);
 }
+// قسم واحد ظاهر من الإعدادات، يُختار من الشريط الجانبي
+let setSec = 'sAlarm';
+try { setSec = localStorage.getItem(KEY + '.setsec') || 'sAlarm'; } catch (e) {}
+function showSec(id) {
+  if (!document.querySelector(`.scard#${id}`)) id = 'sAlarm';
+  setSec = id;
+  try { localStorage.setItem(KEY + '.setsec', id); } catch (e) {}
+  document.querySelectorAll('.scard').forEach(c => c.classList.toggle('on', c.id === id));
+  document.querySelectorAll('#setTabs [data-sec]').forEach(b => b.classList.toggle('on', b.dataset.sec === id));
+  scrollTo(0, 0);
+}
+$('setTabs').addEventListener('click', e => { const b = e.target.closest('[data-sec]'); if (b) showSec(b.dataset.sec); });
+$('setBack').onclick = () => showScreen(prevScreen === 'settings' ? 'home' : prevScreen);
 function settingsScreen() {
+  showSec(setSec);
   syncControls();
   $('mStyle').value = mStyle;
   $('themeSel').value = theme;

@@ -94,9 +94,35 @@
     checks['إضافة منبّه من الإعدادات'] = remind.length === n0 + 1 && document.querySelectorAll('#remList .remi').length === n0 + 1;
     remind.pop(); save();
 
-    // آخر ما زرت في المرجعيات
+    // «انتهى وردي عند هذه الآية» من القائمة بالزر الأيمن (فاطر ١١ في ص ٤٣٥ → يبدأ الورد التالي من فاطر ١٢)
+    lastPage = 435; lastAyah = -1; openReader(435); await wait(700);
+    const f11 = start[35] + 10; openCtx(f11, 300, 300);
+    const endBtn = document.querySelector('#ctx [data-act="end"]'), hBtn = document.querySelector('#ctx [data-act="hifz"]');
+    checks['القائمة بالزر الأيمن فيها الحفظ وإنهاء الورد'] = !!endBtn && !!hBtn;
+    endBtn && endBtn.click(); await wait(200);
+    checks['إنهاء الورد عند آية'] = lastPage === pageOf[f11 + 1] && (lastAyah === f11 + 1 || pageB[lastPage - 1][0] === f11 + 1) && readOn(today()).includes(435);
+    lastAyah = -1;
+    checks['لا شريط حفظ/فهم تحت المصحف'] = !document.querySelector('[data-pact]') && !!$('pOpen');
+
+    // قراءة التفسير: تاريخها، ويبهت لونها بمرور الوقت
+    applyAct([start[3]], 2); checks['تُحفظ يوم قراءة التفسير'] = tfd[start[3]] === today() && tfFade(start[3]) === 0;
+    tfd[start[3]] = today() - 400; checks['تفسير مضت عليه سنة يبهت'] = tfFade(start[3]) === 1;
+    applyAct([start[3]], 2);
+
+    // الرئيسية: بطاقة المراجعة لا تظهر إن لم يكن هناك ما يُراجَع
+    showScreen('home'); await wait(100);
+    checks['بطاقة المراجعة تختفي إن لم يكن شيء مستحقًا'] = $('review').hidden === !count(0, TOTAL - 1).d;
+
+    // الإعدادات: قسم واحد ظاهر، وأقسامها في الشريط الجانبي
+    showScreen('settings'); showSec('sWird'); await wait(50);
+    checks['الإعدادات قسمًا قسمًا من الشريط الجانبي'] = !$('setTabs').hidden && getComputedStyle($('tabs')).display === 'none' &&
+      document.querySelectorAll('.scard.on').length === 1 && $('sWird').classList.contains('on') && getComputedStyle($('sAlarm')).display === 'none';
+    $('setBack').click(); await wait(50);
+    checks['الرجوع من الإعدادات'] = screen !== 'settings' && $('setTabs').hidden;
+
+    // آخر ما قرأت في المرجعيات
     recent = [{ p: 300, t: Date.now() }]; rcSel = -1; showScreen('refs'); await wait(100);
-    checks['آخر ما زرت في المرجعيات'] = document.querySelectorAll('#riList .rvi').length === 1;
+    checks['آخر ما قرأت في المرجعيات'] = document.querySelectorAll('#riList .rvi').length === 1;
 
     // الحفظ في الملف
     applyAct([start[114]], 1); save(); await wait(900);

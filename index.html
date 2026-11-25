@@ -106,15 +106,16 @@ input[type=number]{width:70px}
 #tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--bg);font-size:13px;padding:5px 9px;border-radius:7px;display:none;z-index:20;white-space:nowrap}
 
 /* ---------- الرئيسية ---------- */
-.pie{display:flex;flex-direction:column;align-items:center}
-.pie .act,.pie .go{width:100%;max-width:360px}
-.pie h3{align-self:stretch}
-#donut{width:100%;max-width:280px;height:auto;display:block}
+/* تقدّمك في القرآن: الرسم الدائري كبيرًا وبجانبه التفاصيل */
+.pieb{display:grid;grid-template-columns:minmax(0,420px) minmax(0,460px);justify-content:center;align-items:center;gap:20px 48px;padding:4px 0 8px}
+.pies{display:flex;flex-direction:column;gap:2px}
+.pies .act{margin-top:14px}
+#donut{width:100%;max-width:420px;height:auto;display:block;margin:auto}
 #donut .seg-arc{cursor:pointer;transition:stroke-width .15s}
 #donut .seg-arc:hover{stroke-width:36}
 #donut text{font-family:Tajawal;fill:var(--ink)}
-.plegend{width:100%;max-width:360px;margin-top:8px;border-collapse:collapse;font-size:14px}
-.plegend td{padding:6px 4px;border-top:1px solid var(--line)}
+.plegend{width:100%;border-collapse:collapse;font-size:15px}
+.plegend td{padding:9px 4px;border-top:1px solid var(--line)}
 .plegend td:nth-child(2){color:var(--muted);text-align:left}
 .plegend td:nth-child(3){font-weight:700;text-align:left;width:60px}
 .act{background:var(--bg);border-radius:12px;padding:12px;text-align:center;font-size:15px;margin-top:10px}
@@ -193,7 +194,14 @@ input[type=number]{width:70px}
 @media (prefers-reduced-motion:reduce){#tfPanel,#tfPanel.open{transition:none}}
 /* نص التفسير والآية وحدهما قابلان للتحديد والنسخ */
 #tfPanel .tfa,#tfPanel .tfb{-webkit-user-select:text;user-select:text;cursor:text}
-#reader.tf-open .reader,#reader.tf-open .rbar,#reader.tf-open .pact,#reader.tf-open .rstat{margin-left:408px;margin-right:16px}
+#reader.tf-open .reader,#reader.tf-open .rbar,#reader.tf-open .rstat{margin-left:408px;margin-right:16px}
+#reader .rbar,#reader .rstat{transition:margin .34s cubic-bezier(.2,.8,.3,1)}
+/* حركة الورقة أثناء التقليب تخرج قليلًا عن حدود الكتاب: تُقصّ فلا تُنشئ مساحة تمرير تحت المصحف */
+#reader.flip .reader{overflow:clip;overflow-clip-margin:8px}
+#reader.flip.sliding .reader{overflow:visible}
+#ctx .ci:disabled{opacity:.5;cursor:default}
+#ctx .ci:disabled:hover{background:none}
+#ctx .ci .sw{margin-inline-end:2px}
 .tfh{display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}
 .tfh h2{flex:1;margin:0;font-family:Amiri,serif;font-size:20px;color:var(--accent)}
 .tfa{font-family:"Amiri Quran",Amiri,serif;font-size:21px;line-height:2;padding:10px 14px;background:color-mix(in srgb,var(--frame) 10%,var(--card));border-bottom:1px solid var(--line);max-height:30%;overflow:auto}
@@ -212,7 +220,7 @@ input[type=number]{width:70px}
 /* الضغط المستمر لتقليب الورقة لا يحدّد النص */
 #book,#mtext,.fp,.mpage{-webkit-user-select:none;user-select:none}   /* التقليب بالكيبورد وسحب الورقة يكفيان */
 .wchip.here{border-color:var(--accent);color:var(--accent);font-weight:700}
-/* آخر ما زرت: قائمة منسدلة من شريط المصحف */
+/* آخر ما قرأت: قائمة منسدلة من شريط المصحف */
 .rpopw{position:relative}
 .pop{position:absolute;top:calc(100% + 6px);left:0;z-index:12;width:300px;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 40px #0003;padding:6px;animation:popIn .16s ease-out}
 @keyframes popIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
@@ -288,12 +296,18 @@ input[type=number]{width:70px}
 .mmsg{margin-top:6px;min-height:1em}
 .setgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px}
 /* الإعدادات: عمود واحد بأقسام، ودليل أقسام ثابت بجانبه */
-.sets{max-width:1060px;margin:auto;padding:18px 16px 60px;display:grid;grid-template-columns:190px minmax(0,1fr);gap:18px;align-items:start}
-.setnav{position:sticky;top:18px;display:flex;flex-direction:column;gap:2px}
-.setnav a{color:var(--ink);text-decoration:none;font-size:14px;padding:8px 12px;border-radius:9px}
-.setnav a:hover{background:var(--hover)}
-.setcol{display:flex;flex-direction:column;gap:14px;min-width:0}
-.scard{padding:18px 20px;scroll-margin-top:16px}
+/* الإعدادات: قسم واحد ظاهر، وأقسامها في الشريط الجانبي تحت الشعار */
+.sets{max-width:880px;margin:auto;padding:18px 16px 60px}
+.scard{padding:20px 22px;display:none}
+.scard.on{display:block;animation:screenIn .2s ease-out}
+#setTabs{display:flex;flex-direction:column;gap:4px}
+#setTabs button{display:flex;align-items:center;gap:10px;border:0;background:none;font:inherit;font-size:15px;color:var(--ink);padding:10px 12px;border-radius:10px;cursor:pointer;text-align:start;transition:background-color .15s,color .15s}
+#setTabs button:hover{background:var(--hover)}
+#setTabs button.on{background:var(--accent);color:var(--bg);font-weight:700}
+#setTabs i{font-style:normal;width:22px;text-align:center}
+#setTabs .sback{color:var(--muted);font-size:14px}
+#setTabs .stitle{font-size:12px;color:var(--muted);padding:6px 12px 2px}
+body.in-settings #tabs,body.in-settings #tabs2{display:none}
 .scard h3{font-size:17px;margin-bottom:6px}
 .shead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
 .shead h3{margin:0}
@@ -325,8 +339,7 @@ label.srow{cursor:pointer}
 .days em{font-style:normal;font-size:12px;color:var(--muted);margin-inline-start:4px}
 .remi .ib{width:30px;height:30px;font-size:14px;margin-inline-start:auto}
 .remempty{background:var(--bg);border:1px dashed var(--line);border-radius:12px;padding:18px;text-align:center;color:var(--muted);font-size:14px}
-@media (max-width:900px){.sets{grid-template-columns:1fr}.setnav{display:none}}
-/* المرجعيات: آخر ما زرت */
+/* المرجعيات: آخر ما قرأت */
 .rcsep{border-top:1px solid var(--line);margin:8px 4px}
 .rgrp{font-size:13px;font-weight:700;color:var(--muted);margin:14px 4px 8px}
 .rgrp:first-child{margin-top:0}
@@ -437,6 +450,7 @@ body.bulk-on{padding-bottom:130px}
 .bf .cnt{color:var(--muted);font-size:13px;flex-basis:100%}
 .hint{color:var(--muted);font-size:12px;padding:0 16px 10px}
 
+@media (max-width:980px){ .pieb{grid-template-columns:minmax(0,360px)} }
 @media (max-width:760px){ .dash{grid-template-columns:1fr} .pie{grid-row:auto} .kpis.four{grid-template-columns:repeat(2,1fr)} }
 @media (max-width:600px){
   h1{font-size:19px} .hd{gap:8px;padding:8px 10px} .seg button{padding:6px 9px;font-size:13px}
@@ -450,6 +464,16 @@ body.bulk-on{padding-bottom:130px}
 <div id="updBar" hidden><span id="updTxt"></span><button class="btn pri" id="updNow">حدِّث الآن وأعد الفتح</button></div>
 <nav id="side" aria-label="الأقسام">
   <div class="brand"><img src="electron/icon.png" alt=""><span>صاحبُك القرآن</span></div>
+  <div id="setTabs" hidden aria-label="أقسام الإعدادات">
+    <button class="sback" id="setBack"><i>→</i>رجوع</button>
+    <div class="stitle">الإعدادات</div>
+    <button data-sec="sAlarm"><i>🔔</i>المنبهات</button>
+    <button data-sec="sWird"><i>📅</i>الأوراد</button>
+    <button data-sec="sMushaf"><i>📖</i>المصحف والمظهر</button>
+    <button data-sec="updCard"><i>⬆️</i>التحديثات</button>
+    <button data-sec="sData"><i>💾</i>البيانات</button>
+    <button data-sec="sAbout"><i>ℹ️</i>عن التطبيق</button>
+  </div>
   <div id="tabs">
     <button data-s="home"><i>🏠</i>الرئيسية</button>
     <button data-s="reader"><i>📖</i>المصحف</button>
@@ -499,24 +523,28 @@ body.bulk-on{padding-bottom:130px}
     </div>
   </div>
 
-  <div class="card pie">
-    <h3>تقدّمك في القرآن</h3>
-    <svg id="donut" viewBox="-28 -28 316 316" role="img" aria-label="رسم دائري لتقدّم الحفظ والفهم"></svg>
-    <table class="plegend" id="plegend"></table>
-    <div class="act" id="act"></div>
-    <button class="btn go" data-goto="mapScreen">🗺 افتح الخريطة وسجّل محفوظك</button>
-  </div>
-
-  <div class="kpis" id="kpis" hidden></div>
-
-  <div class="card" id="review">
+  <div class="card wide" id="review" hidden>
     <div class="rvh">
       <h3>🔁 ما يحتاج إلى مراجعة</h3>
       <span class="sum" id="rvSummary"></span>
-      <button class="lnk" data-goto="settings">إعدادات المراجعة</button>
+      <button class="lnk" data-goto="settings" data-gsec="sWird">إعدادات المراجعة</button>
     </div>
     <div id="rvList"></div>
   </div>
+
+  <div class="card pie wide">
+    <h3>تقدّمك في القرآن</h3>
+    <div class="pieb">
+      <svg id="donut" viewBox="-28 -28 316 316" role="img" aria-label="رسم دائري لتقدّم الحفظ وقراءة التفسير"></svg>
+      <div class="pies">
+        <table class="plegend" id="plegend"></table>
+        <div class="act" id="act"></div>
+        <button class="btn go" data-goto="mapScreen">🗺 افتح الخريطة وسجّل محفوظك</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="kpis" id="kpis" hidden></div>
  </div>
 </section>
 
@@ -529,8 +557,9 @@ body.bulk-on{padding-bottom:130px}
     <button class="btn" id="fsDown" title="تصغير الخط">أ −</button>
     <button class="btn" id="fsUp" title="تكبير الخط">أ +</button>
     <button class="btn wchip" id="wirdChip" title="العودة إلى موضع ورد القراءة"></button>
-    <span class="rpopw"><button class="btn" id="recentBtn" title="مواضع تصفّحتها مؤخرًا خارج الورد">🕘 آخر ما زرت</button>
+    <span class="rpopw"><button class="btn" id="recentBtn" title="آخر ثلاثة مواضع قرأتها خارج الورد">🕘 آخر ما قرأت</button>
       <div class="pop" id="recentPop" hidden></div></span>
+    <button class="btn" id="pOpen" title="آيات الصفحة وحالاتها لتسجيل الحفظ والمراجعة وقراءة التفسير">📋 تفاصيل الصفحة</button>
   </div>
   <div class="reader">
     <button class="nav" id="pgPrev" title="الصفحة السابقة">›</button>
@@ -562,13 +591,6 @@ body.bulk-on{padding-bottom:130px}
       <span class="muted" id="tfState"></span>
     </div>
   </aside>
-  <div class="pact">
-    <span id="pactLbl">هذه الصفحة:</span>
-    <button class="btn" data-pact="1"><i class="sw" style="background:var(--hifz)"></i>حفظ</button>
-    <button class="btn" data-pact="2"><i class="sw" style="background:var(--fahm)"></i>فهم</button>
-    <button class="btn" id="pRev">🔁 تمت المراجعة</button>
-    <button class="btn" id="pOpen">التفاصيل والآيات</button>
-  </div>
 </section>
 
 <!-- ================= الورد ================= -->
@@ -666,8 +688,8 @@ body.bulk-on{padding-bottom:130px}
   <div class="legend">
     <span><i class="sw" style="background:var(--tile)"></i> لم يبدأ</span>
     <span><i class="sw" style="background:var(--th)"></i> حفظ</span>
-    <span><i class="sw" style="background:var(--tf)"></i> فهم</span>
-    <span><i class="sw" style="background:var(--tb)"></i> حفظ وفهم</span>
+    <span><i class="sw" style="background:var(--tf)"></i> قرأتُ تفسيره</span>
+    <span><i class="sw" style="background:var(--tb)"></i> حفظ وتفسير</span>
     <span><i class="sw" style="background:var(--tr)"></i> يحتاج إلى مراجعة</span>
     <span>— تمتلئ البطاقة من الأسفل إلى الأعلى بقدر ما أنجزت</span>
   </div>
@@ -698,14 +720,6 @@ body.bulk-on{padding-bottom:130px}
 <!-- ================= الإعدادات ================= -->
 <section class="screen" id="settings">
  <div class="sets">
-  <nav class="setnav" id="setNav" aria-label="أقسام الإعدادات">
-    <a href="#sAlarm">🔔 المنبهات</a>
-    <a href="#sWird">📅 الأوراد</a>
-    <a href="#sMushaf">📖 المصحف والمظهر</a>
-    <a href="#updCard">⬆️ التحديثات</a>
-    <a href="#sData">💾 البيانات</a>
-    <a href="#sAbout">ℹ️ عن التطبيق</a>
-  </nav>
   <div class="setcol">
 
   <div class="card scard" id="sAlarm">
@@ -843,7 +857,7 @@ body.bulk-on{padding-bottom:130px}
       <button class="btn" id="bRange">تحديد</button></span>
     <span style="flex:1"></span>
     <button class="btn" data-bact="1"><i class="sw" style="background:var(--hifz)"></i>حفظ</button>
-    <button class="btn" data-bact="2"><i class="sw" style="background:var(--fahm)"></i>فهم</button>
+    <button class="btn" data-bact="2"><i class="sw" style="background:var(--fahm)"></i>قرأتُ التفسير</button>
     <button class="btn" data-bact="3"><i class="sw" style="background:var(--both)"></i>كلاهما</button>
     <button class="btn" data-bact="0">مسح</button>
     <button class="btn" id="bRev">🔁 تمت المراجعة</button>
@@ -871,13 +885,13 @@ body.bulk-on{padding-bottom:130px}
     <div class="bf">
       <span class="cnt" id="cnt"></span>
       <button class="btn" data-act="1"><i class="sw" style="background:var(--hifz)"></i>حفظ</button>
-      <button class="btn" data-act="2"><i class="sw" style="background:var(--fahm)"></i>فهم</button>
+      <button class="btn" data-act="2"><i class="sw" style="background:var(--fahm)"></i>قرأتُ التفسير</button>
       <button class="btn" data-act="3"><i class="sw" style="background:var(--both)"></i>كلاهما</button>
       <button class="btn" data-act="0">مسح</button>
       <button class="btn" id="revBtn" title="تسجيل مراجعة الآيات المحفوظة المحددة اليوم">🔁 تمت المراجعة</button>
       <label class="ivl" title="موعد مراجعة خاص بالمحفوظ المحدد، بدل الإعداد العام">🗓 تُراجَع: <select id="sIvl" class="ivsel"></select></label>
       <span style="flex:1"></span>
-      <button class="btn" id="sTafsir">📖 التفسير</button>
+      <button class="btn" id="sTafsir">📖 افتح التفسير</button>
       <button class="btn" id="toReader">افتح في المصحف</button>
       <button class="btn" id="selAll">تحديد الكل</button>
     </div>
