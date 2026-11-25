@@ -42,6 +42,12 @@
       "electron/**/*",
       "package.json"
     ],
+    "asarUnpack": [
+      "fonts/**",
+      "quran-text.js",
+      "mushaf-1441.js",
+      "tafsir-muyassar.js"
+    ],
     "win": {
       "target": "nsis",
       "icon": "build/icon.ico",
