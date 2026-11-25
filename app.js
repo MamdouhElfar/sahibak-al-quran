@@ -57,15 +57,26 @@ let backupDay = 0, backupSnooze = 0;   // يوم آخر نسخة احتياطي�
 // ورد الحفظ والمراجعة
 let hifzLog = {};   // { رقم اليوم: [أرقام الآيات التي حُفظت جديدًا فيه] }
 let revLog = {};    // { رقم اليوم: عدد الآيات التي رُوجعت فيه }
-let hGoal = 5;      // آيات الحفظ الجديد يوميًا
-let hDir = 'b';
+let hGoal = 5;      // آيات الحفظ الجديد يوميًا (إن كان المقدار بالآيات)
+let hUnit = 'a';    // وحدة الحفظ الجديد: 'a' بالآيات، 'p' بالصفحات
+let hGoalP = 1;     // الحفظ الجديد بالصفحات: بأنصاف الصفحات (١ = نصف صفحة)
+let hDir = 'b';     // 'b': من الناس إلى البقرة (جزء عمّ أولًا)، 'f': من الفاتحة إلى الناس
+// المرجعيات: cats [{id, name}]، items [{i: الآية، c: التصنيف، note، t: اليوم}]
 let refs = { cats: [], items: [] };
-// تنبيهات الأوراد: لكل ورد تشغيل ووقت
-const REM_DEF = { read: { on: false, time: '20:00' }, hifz: { on: false, time: '06:00' }, rev: { on: false, time: '17:00' } };
-let remind = JSON.parse(JSON.stringify(REM_DEF));   // المرجعيات: cats [{id, name}]، items [{i: الآية، c: التصنيف، note، t: اليوم}]     // 'b': من الناس إلى البقرة (جزء عمّ أولًا)، 'f': من الفاتحة إلى الناس
+// موضع الورد داخل الصفحة: إن انتهى ورد عند نهاية سورة في وسط صفحة، فهذه أول آية من السورة التالية (وإلا -١: أول الصفحة)
+let lastAyah = -1;
+let readMode = 'timer';   // احتساب الصفحة المقروءة: 'timer' تلقائيًا بعد مدة، 'manual' بزر تحت كل صفحة
+// موعد مراجعة خاص لكل آية محفوظة: ٠ = حسب الإعداد العام، وإلا فهرس في RCYC
+const RCYC = [0, 3, 7, 14, 30, 60, 90];
+const ivl = new Uint8Array(TOTAL);
+const cyc = i => ivl[i] ? RCYC[ivl[i]] : cycle;
+// المنبهات: قائمة يضيفها المستخدم، لكل منبه نوع ووقت وأيام
+// kind: read | hifz | rev (تظهر إن لم يكتمل الورد) | sura (سورة بعينها) | note (تذكير بنص تكتبه)
+const REM_KINDS = { read: '📖 ورد القراءة', hifz: '🧠 ورد الحفظ', rev: '🔁 ورد المراجعة', sura: '📗 قراءة سورة', note: '⏰ تذكير' };
+let remind = [];
 
 // ---------- التحقق من صحة البيانات (للتحميل والاسترجاع) ----------
-const CYCLES = [3, 7, 14, 30, 60], WIRDS = [1, 2, 3, 4, 5, 10, 20, 40], HGOALS = [1, 2, 3, 5, 7, 10, 15, 20];
+const CYCLES = [3, 7, 14, 30, 60], WIRDS = [1, 2, 3, 4, 5, 10, 20, 40], HGOALS = [1, 2, 3, 5, 7, 10, 15, 20], HGOALPS = [1, 2, 3, 4, 6, 8];
 const cleanDir = v => v === 'b' || v === 'f' ? v : null;
 const int = (v, min, max) => { const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v; return Number.isInteger(n) && n >= min && n <= max ? n : null; };
 const day = v => int(v, 1, today() + 1);          // +1: نسخة من جهاز في منطقة زمنية متقدّمة
@@ -103,15 +114,22 @@ function cleanRefs(o) {
     .map(x => ({ i: x.i, c: x.c, note: typeof x.note === 'string' ? x.note.slice(0, 1000) : '', t: int(x.t, 0, 1e7) ?? today() }));
   return { cats, items };
 }
+const okTime = t => typeof t === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(t);
 function cleanRemind(o) {
   if (!o || typeof o !== 'object') return null;
-  const out = {};
-  for (const k in REM_DEF) {
-    const r = o[k] || {};
-    out[k] = { on: r.on === true, time: /^([01]\d|2[0-3]):[0-5]\d$/.test(r.time) ? r.time : REM_DEF[k].time };
+  // الصيغة القديمة (حتى ١٫٧): { read: {on, time}, hifz: …, rev: … } تتحول إلى قائمة
+  if (!Array.isArray(o)) {
+    const def = { read: '20:00', hifz: '06:00', rev: '17:00' };
+    return Object.keys(def).filter(k => o[k]).map((k, n) => ({ id: n + 1, kind: k, on: o[k].on === true, time: okTime(o[k].time) ? o[k].time : def[k], days: [], sura: 18, text: '' }));
   }
-  return out;
+  const seen = new Set();
+  return o.filter(r => r && REM_KINDS[r.kind] && int(r.id, 1, 1e9) !== null && !seen.has(r.id) && seen.add(r.id)).slice(0, 30).map(r => ({
+    id: r.id, kind: r.kind, on: r.on !== false, time: okTime(r.time) ? r.time : '08:00',
+    days: Array.isArray(r.days) ? [...new Set(r.days.filter(d => int(d, 0, 6) !== null))].sort() : [],
+    sura: int(r.sura, 1, 114) ?? 18, text: typeof r.text === 'string' ? r.text.slice(0, 80) : '',
+  }));
 }
+const cleanIvl = s => typeof s === 'string' && s.length === TOTAL && /^[0-6]+$/.test(s) ? s : null;
 function cleanRLog(o) {
   if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
   const out = {};
@@ -176,7 +194,14 @@ function load() {
   hDir = read('.hdir', str, cleanDir) ?? 'b';
   dwell = read('.dwell', str, oneOf(DWELLS)) ?? 15;
   refs = read('.refs', json, cleanRefs) ?? { cats: [], items: [] };
-  remind = read('.remind', json, cleanRemind) ?? JSON.parse(JSON.stringify(REM_DEF));
+  remind = read('.remind', json, cleanRemind) ?? [];
+  hUnit = read('.hunit', str, v => v === 'a' || v === 'p' ? v : null) ?? 'a';
+  hGoalP = read('.hgoalp', str, oneOf(HGOALPS)) ?? 1;
+  readMode = read('.rmode', str, v => v === 'timer' || v === 'manual' ? v : null) ?? 'timer';
+  lastAyah = read('.lastAyah', str, v => int(v, -1, TOTAL - 1)) ?? -1;
+  if (lastAyah >= 0 && pageOf[lastAyah] !== lastPage) lastAyah = -1;   // لا يصح إلا داخل صفحة الورد
+  const iv = read('.ivl', str, cleanIvl);
+  ivl.fill(0); if (iv) for (let i = 0; i < TOTAL; i++) ivl[i] = +iv[i];
   const t = today();
   for (let i = 0; i < TOTAL; i++) if ((state[i] & 1) && !rev[i]) rev[i] = t;
   // القيم التالفة تُحفظ كما هي قبل أن يكتب فوقها أول حفظ، لإمكان إنقاذها يدويًا
@@ -208,6 +233,11 @@ function save() {
     localStorage.setItem(KEY + '.dwell', dwell);
     localStorage.setItem(KEY + '.refs', JSON.stringify(refs));
     localStorage.setItem(KEY + '.remind', JSON.stringify(remind));
+    localStorage.setItem(KEY + '.hunit', hUnit);
+    localStorage.setItem(KEY + '.hgoalp', hGoalP);
+    localStorage.setItem(KEY + '.rmode', readMode);
+    localStorage.setItem(KEY + '.lastAyah', lastAyah);
+    localStorage.setItem(KEY + '.ivl', ivl.join(''));
     deskSave();
   } catch (e) {
     if (saveFailWarned) return;
@@ -222,7 +252,10 @@ function save() {
 }
 const hasData = () => state.some(x => x) || Object.keys(readLog).length > 0 || Object.keys(revLog).length > 0 || refs.items.length > 0;
 
-const isDue = i => (state[i] & 1) && today() - rev[i] >= cycle;
+const isDue = i => (state[i] & 1) && today() - rev[i] >= cyc(i);
+const hasCustomIvl = () => { for (let i = 0; i < TOTAL; i++) if ((state[i] & 1) && ivl[i]) return true; return false; };
+const ivlName = k => !k ? `حسب الإعداد العام (${cycleName(cycle)})` : cycleName(RCYC[k]);
+const cycleName = d => ({ 3: 'كل ٣ أيام', 7: 'كل أسبوع', 14: 'كل أسبوعين', 30: 'كل شهر', 60: 'كل شهرين', 90: 'كل ٣ أشهر' }[d] || `كل ${ayyamN(d)}`);
 
 function count(from, to) {
   let h = 0, f = 0, b = 0, d = 0, oldest = Infinity, latest = 0;
@@ -252,21 +285,41 @@ function khatmaPages() {
 // ---------- مقاييس الورد الثلاثة ----------
 const hifzCount = d => (hifzLog[d] || []).length;
 const revCount = d => revLog[d] || 0;
-function revQuota() {   // ما يلزم مراجعته يوميًا ليُراجَع المحفوظ كله مرة في كل دورة
-  let h = 0;
-  for (let i = 0; i < TOTAL; i++) h += state[i] & 1;
-  return h ? Math.ceil(h / cycle) : 0;
+function revQuota() {   // ما يلزم مراجعته يوميًا ليُراجَع كل محفوظ مرة في موعده (العام أو الخاص به)
+  let q = 0;
+  for (let i = 0; i < TOTAL; i++) if (state[i] & 1) q += 1 / cyc(i);
+  return q ? Math.ceil(q - 1e-9) : 0;
 }
+// نصيب كل آية من صفحتها (بطول نصها)، لحساب الحفظ بالصفحات
+const share = new Float32Array(TOTAL);
+pageB.forEach(([f, t]) => {
+  let L = 0; for (let i = f; i <= t; i++) L += AYAT[i].length;
+  for (let i = f; i <= t; i++) share[i] = AYAT[i].length / L;
+});
+const pagesOf = ids => (ids || []).reduce((s, i) => s + share[i], 0);
+// «نصف صفحة»، «صفحة ونصف»، «١٫٣ صفحة» …
+function pagesTxt(x) {
+  const r = Math.round(x * 10) / 10;
+  if (r === 0) return 'لا شيء';
+  if (r === 0.5) return 'نصف صفحة';
+  if (r === 1.5) return 'صفحة ونصف';
+  if (Number.isInteger(r)) return safahat(r);
+  return `${ar(r)} صفحة`;
+}
+const hByPage = () => hUnit === 'p';
+const HIFZ_TOL = 0.1;   // بالصفحات: يكتمل الورد إن بقي منه أقل من عُشر صفحة (حدود الآيات لا تطابق المقدار تمامًا)
 const METRICS = {
   read: { n: readCount, goal: () => wird, unit: safahat, name: 'القراءة' },
-  hifz: { n: hifzCount, goal: () => hGoal, unit: ayat, name: 'الحفظ' },
+  hifz: { n: d => hByPage() ? pagesOf(hifzLog[d]) : hifzCount(d), goal: () => hByPage() ? hGoalP / 2 : hGoal,
+          unit: v => hByPage() ? pagesTxt(v) : ayat(v), name: 'الحفظ', tol: () => hByPage() ? HIFZ_TOL : 0 },
   rev:  { n: revCount, goal: revQuota, unit: ayat, name: 'المراجعة' },
 };
+const met = (m, n, goal = m.goal()) => goal > 0 && n >= goal - (m.tol ? m.tol() : 0) - 1e-9;
 function streakOf(m, goal = m.goal()) {
   if (!goal) return 0;
   let d = today(), n = 0;
-  if (m.n(d) < goal) d--;           // اليوم لم يكتمل بعد؛ السلسلة ما زالت قائمة من أمس
-  while (m.n(d) >= goal) { n++; d--; }
+  if (!met(m, m.n(d), goal)) d--;           // اليوم لم يكتمل بعد؛ السلسلة ما زالت قائمة من أمس
+  while (met(m, m.n(d), goal)) { n++; d--; }
   return n;
 }
 const streak = () => streakOf(METRICS.read);
@@ -284,6 +337,29 @@ function nextHifz(n) {     // أول n آيات لم تُحفظ بعد بترت�
   if (n <= 0) return out;
   for (const i of hifzOrder()) if (!(state[i] & 1)) { out.push(i); if (out.length >= n) break; }
   return out;
+}
+// بالصفحات: آيات متتالية يقارب مجموع أنصبتها ما بقي (تقف عند أقرب حدّ آية إلى المقدار)
+function nextHifzPages(rem) {
+  const out = [];
+  if (rem <= HIFZ_TOL) return out;
+  let sum = 0;
+  for (const i of hifzOrder()) {
+    if (state[i] & 1) continue;
+    if (out.length && Math.abs(sum + share[i] - rem) >= Math.abs(sum - rem)) break;
+    out.push(i); sum += share[i];
+  }
+  return out;
+}
+// ورد الحفظ الباقي اليوم بحسب الوحدة المختارة
+const hifzPortion = () => {
+  const m = METRICS.hifz, left = m.goal() - m.n(today());
+  return hByPage() ? nextHifzPages(left) : nextHifz(left);
+};
+// ما بقي من القرآن لم يُحفظ، بوحدة الحفظ المختارة
+function hifzLeft() {
+  let a = 0, p = 0;
+  for (let i = 0; i < TOTAL; i++) if (!(state[i] & 1)) { a++; p += share[i]; }
+  return hByPage() ? p : a;
 }
 // يصف مجموعة آيات بنطاقات متصلة: «الملك ٢٨–٣٠ · القلم ١–٢»
 function describeAyat(ids) {
@@ -407,9 +483,13 @@ function heroRow() {
 
 // ---------- خطة اليوم: القراءة والحفظ والمراجعة ----------
 let hifzToday = [], revToday = [];
+const numTxt = n => ar(Number.isInteger(n) ? n : Math.round(n * 10) / 10);
+const revRule = h => hasCustomIvl() ? `مراجعة ${ayat(h)} كلٌّ في موعده` : `مراجعة ${ayat(h)} ${cycleName(cycle)}`;
+// موضع ورد القراءة: «صفحة ٤٣٥»، أو «سورة فاطر (ص ٤٣٤)» إن انتهى الورد السابق عند نهاية سورة
+const wirdPosTxt = () => lastAyah >= 0 ? `سورة ${SURAS[suraOf[lastAyah] - 1][0]} (ص ${ar(lastPage)})` : `صفحة ${ar(lastPage)}`;
 function planRow(id, m, goal, detail, done) {
   const el = $(id), n = m.n(today());
-  el.querySelector('.pv').innerHTML = goal ? `<b>${ar(n)}</b> / ${m.unit(goal)}` : '';
+  el.querySelector('.pv').innerHTML = goal ? `<b>${numTxt(n)}</b> / ${m.unit(goal)}` : '';
   el.querySelector('.prog span').style.width = (goal ? Math.min(1, n / goal) * 100 : 0) + '%';
   el.querySelector('.pd').innerHTML = detail;
   el.classList.toggle('done', !!done);
@@ -422,19 +502,19 @@ function planCard() {
   planRow('planRead', METRICS.read, wird,
     (rn >= wird ? '<span class="done-msg">أتممتَ ورد القراءة ✓</span>' : `بقي ${safahat(wird - rn)}`) +
     (rs ? ` · الأيام المتتالية: ${ar(rs)}` : ''));
-  $('hContinue').textContent = `متابعة القراءة من صفحة ${ar(lastPage)}`;
+  $('hContinue').textContent = `متابعة القراءة من ${wirdPosTxt()}`;
 
   // الحفظ الجديد
-  const hn = hifzCount(t), hs = streakOf(METRICS.hifz), left = TOTAL - all.h;
-  hifzToday = nextHifz(hGoal - hn);
+  const hs = streakOf(METRICS.hifz), left = TOTAL - all.h, hg = METRICS.hifz.goal();
+  hifzToday = hifzPortion();
   let hd;
   if (!left) hd = '<span class="done-msg">🎉 أتممتَ حفظ القرآن الكريم، تقبّل الله منك</span>';
   else if (!hifzToday.length) {
     const nx = nextHifz(1)[0];
     hd = `<span class="done-msg">أتممتَ ورد الحفظ ✓</span> · غدًا من ${describeAyat([nx])}`;
   } else hd = `ورد اليوم: <span class="tgt">${describeAyat(hifzToday)}</span>`;
-  if (left) hd += `<br>بهذا المقدار تُتمّ حفظ القرآن خلال ${duration(Math.ceil(left / hGoal))} تقريبًا` + (hs ? ` · الأيام المتتالية: ${ar(hs)}` : '');
-  planRow('planHifz', METRICS.hifz, hGoal, hd, !hifzToday.length);
+  if (left) hd += `<br>بهذا المقدار تُتمّ حفظ القرآن خلال ${duration(Math.ceil(hifzLeft() / hg))} تقريبًا` + (hs ? ` · الأيام المتتالية: ${ar(hs)}` : '');
+  planRow('planHifz', METRICS.hifz, hg, hd, !hifzToday.length);
 
   // المراجعة
   const q = revQuota(), vn = revCount(t);
@@ -443,7 +523,7 @@ function planCard() {
   if (!all.h) vd = 'سجّل محفوظك من الخريطة ليظهر هنا ورد المراجعة اليومي.';
   else if (!revToday.length) vd = vn >= q ? '<span class="done-msg">أتممتَ ورد المراجعة ✓</span>' : '<span class="done-msg">لا مراجعة مستحقة اليوم ✓</span>';
   else vd = `ورد اليوم: <span class="tgt">${describePages(revToday)}</span>`;
-  if (all.h) vd += `<br>مراجعة ${ayat(all.h)} كل ${ayyamN(cycle)} = ${ayat(q)} يوميًا`;
+  if (all.h) vd += `<br>${revRule(all.h)} = ${ayat(q)} يوميًا`;
   planRow('planRev', METRICS.rev, q, vd, !revToday.length);
 }
 $('hHifzOpen').onclick = () => hifzToday.length && openReader(pageOf[hifzToday[0]], 'hifz');
@@ -491,7 +571,7 @@ function reviewCard() {
     }).join('') + (due.length > MAX ? `<span class="more">و${plural(due.length - MAX, 'سورة واحدة', 'سورتان', 'سور', 'سورة')} أخرى</span>` : '');
   } else {
     let next = Infinity;
-    for (let i = 0; i < TOTAL; i++) if (state[i] & 1) next = Math.min(next, rev[i] + cycle);
+    for (let i = 0; i < TOTAL; i++) if (state[i] & 1) next = Math.min(next, rev[i] + cyc(i));
     const dd = next - t;
     $('rvList').innerHTML = `<span class="more">أقرب مراجعة ${dd <= 1 ? 'غدًا' : `بعد ${ayyamN(dd)}`} بإذن الله</span>`;
   }
@@ -545,7 +625,9 @@ function loadQcf(p) {
 const BASM_GLYPHS = HAS_M ? M1441[1].find(r => Array.isArray(r[0]) && r[0][0] === 0)[0][1].split(' ').slice(0, -1) : [];
 
 function ayahCls(i, hifzSet) {
-  return isDue(i) ? ' due' : readerMode === 'hifz' && hifzSet.has(i) ? ' h1' : '';
+  // ما قبل موضع الورد في صفحته قُرئ في الورد السابق، فيُخفَّف لونه حتى تُقرأ الصفحة
+  const pre = readerMode === 'read' && lastAyah >= 0 && i < lastAyah && pageOf[i] === lastPage && !readOn(today()).includes(lastPage) ? ' pre' : '';
+  return (isDue(i) ? ' due' : readerMode === 'hifz' && hifzSet.has(i) ? ' h1' : '') + pre;
 }
 function mushafHtml(p, hifzSet) {
   return M1441[p].map(r => {
@@ -675,7 +757,7 @@ function onFlip() {
 // عرض الكتاب بحيث تتسع الصفحة كاملةً لارتفاع النافذة (نسبة الصفحة ٥٢٠:٨٢٠)
 function sizeBook() {
   const h = Math.max(420, innerHeight - 200) * fontSize / 26;   // أ− وأ+ تصغّر الكتاب وتكبّره
-  $('book').style.maxWidth = Math.round(2 * h * 520 / 820) + 'px';
+  $('book').style.maxWidth = $('rstat').style.maxWidth = Math.round(2 * h * 520 / 820) + 'px';   // أزرار القراءة تحت كل صفحة
 }
 function initBook() {
   const host = $('book');
@@ -701,14 +783,20 @@ function updateReaderBar() {
   $('pgPrev').disabled = Math.min(...vis) === 1;
   $('pgNext').disabled = Math.max(...vis) === PAGES_N;
   $('pactLbl').textContent = vis.length > 1 ? 'هاتان الصفحتان:' : 'هذه الصفحة:';
-  $('wirdChip').textContent = `📖 موضع الورد: ص ${ar(lastPage)}`;
+  $('wirdChip').textContent = `📖 موضع الورد: ${lastAyah >= 0 ? `${SURAS[suraOf[lastAyah] - 1][0]} · ` : ''}ص ${ar(lastPage)}`;
   $('wirdChip').classList.toggle('here', vis.includes(lastPage));
-  drawRecent();
+  $('recentBtn').disabled = !recent.length;
 }
 
-// ---------- آخر ما زرت: ثلاثة مواضع تصفّحتها خارج الورد (بقيت عليها ٤ ثوانٍ فأكثر) ----------
+// ---------- آخر ما زرت: مواضع تصفّحتها خارج الورد (بقيت عليها ٤ ثوانٍ فأكثر) ----------
+// [{p: الصفحة، t: وقت الزيارة}] الأحدث أولًا؛ تُعرض في قائمة من زر «آخر ما زرت» وفي قسم المرجعيات
+const RECENT_N = 10;
 let recent = [];
-try { recent = (JSON.parse(localStorage.getItem(KEY + '.recent')) || []).filter(p => int(p, 1, PAGES_N)).slice(0, 3); } catch (e) {}
+try {
+  recent = (JSON.parse(localStorage.getItem(KEY + '.recent')) || [])
+    .map(x => typeof x === 'number' ? { p: x, t: 0 } : x)
+    .filter(x => x && int(x.p, 1, PAGES_N) && typeof x.t === 'number').slice(0, RECENT_N);
+} catch (e) {}
 let recentT = null;
 const nearWird = p => p >= lastPage - 2 && p <= lastPage + 1;
 function noteVisit() {
@@ -716,25 +804,45 @@ function noteVisit() {
   const p = page;
   recentT = setTimeout(() => {
     if (screen !== 'reader' || page !== p || nearWird(p)) return;
-    recent = [p, ...recent.filter(x => x !== p && Math.abs(x - p) > 1)].slice(0, 3);
+    recent = [{ p, t: Date.now() }, ...recent.filter(x => Math.abs(x.p - p) > 1)].slice(0, RECENT_N);
     try { localStorage.setItem(KEY + '.recent', JSON.stringify(recent)); } catch (e) {}
-    deskSave(); drawRecent();
+    deskSave(); updateReaderBar();
+    if (screen === 'refs') refsScreen();
   }, 4000);
 }
-function drawRecent() {
-  const vis = visiblePages(), list = recent.filter(p => !vis.includes(p));
-  $('recent').innerHTML = list.length ? '<span class="muted">آخر ما زرت:</span>' + list.map(p =>
-    `<button class="lnk" data-p="${p}">${SURAS[suraOf[pageB[p - 1][0]] - 1][0]} · ص ${ar(p)}</button>`).join('') : '';
+// «قبل ٥ دقائق»، «قبل ٣ ساعات»، «أمس» …
+function agoTxt(ms) {
+  if (!ms) return '';
+  const m = Math.floor((Date.now() - ms) / 60000);
+  if (m < 2) return 'الآن';
+  if (m < 60) return `قبل ${plural(m, 'دقيقة', 'دقيقتين', 'دقائق', 'دقيقة')}`;
+  const h = Math.floor(m / 60);
+  if (h < 24 && new Date(ms).getDate() === new Date().getDate()) return `قبل ${plural(h, 'ساعة', 'ساعتين', 'ساعات', 'ساعة')}`;
+  const d = today() - Math.floor((ms - new Date(ms).getTimezoneOffset() * 6e4) / 864e5);
+  return ayyam(d);
 }
-$('recent').addEventListener('click', e => { const b = e.target.closest('[data-p]'); if (b) openReader(+b.dataset.p); });
+const pageSura = p => SURAS[suraOf[pageB[p - 1][0]] - 1][0];
+function recentPop() {
+  const pop = $('recentPop');
+  pop.innerHTML = '<div class="ph2">🕘 آخر ما زرت</div>' + recent.map(x =>
+    `<button class="ri2" data-p="${x.p}"><b>${pageSura(x.p)}</b><span>ص ${ar(x.p)} · الجزء ${ar(juzOf[pageB[x.p - 1][0]])}</span><em>${agoTxt(x.t)}</em></button>`).join('') +
+    '<button class="lnk" data-goto2="refs">عرضها في المرجعيات</button>';
+  pop.hidden = false;
+}
+$('recentBtn').onclick = e => { e.stopPropagation(); $('recentPop').hidden ? recentPop() : ($('recentPop').hidden = true); };
+$('recentPop').addEventListener('click', e => {
+  const b = e.target.closest('[data-p]');
+  $('recentPop').hidden = true;
+  if (b) openReader(+b.dataset.p);
+  else if (e.target.closest('[data-goto2]')) { rcSel = -1; showScreen('refs'); }
+});
+document.addEventListener('mousedown', e => { if (!$('recentPop').hidden && !e.target.closest('#recentPop,#recentBtn')) $('recentPop').hidden = true; });
 $('wirdChip').onclick = () => openReader(lastPage);
 
-// التبديل بين الكتاب والصفحة الواحدة، مع نقل حالة القراءة إلى مكانها
+// التبديل بين الكتاب والصفحة الواحدة
 function setBookMode(on) {
   bookOn = on;
   $('reader').classList.toggle('flip', on);
-  if (on) $('rstat').append($('readSt'), $('mpToday'));          // تحت الكتاب
-  else { $('mpNum').before($('readSt')); $('mpNum').after($('mpToday')); }   // في تذييل الصفحة
 }
 function renderPage() {
   if (screen === 'reader' && wantBook()) {
@@ -759,6 +867,11 @@ function renderPage() {
   startReadTimer();
   noteVisit();
 }
+// إعادة رسم الصفحات الظاهرة (بعد تغيّر موضع الورد داخل الصفحة)
+function repaintPages() {
+  if (bookOn) { paintVer++; visiblePages().forEach(fillPage); }
+  else drawText(page);
+}
 
 // آيات الصفحات الظاهرة (صفحة أو صفحتان متتاليتان)
 function visibleAyat() {
@@ -774,47 +887,105 @@ function refreshPageActions() {
   $('mpToday').textContent = `اليوم: ${safahat(readCount(today()))}`;
 }
 
-// ورد القراءة يمضي من موضعه فقط: تُحسب الصفحة بعد ١٥ ثانية إن كانت صفحة الورد (lastPage) فيتقدّم الموضع صفحة؛
-// وفي العرض المزدوج تُحسب اليمنى ثم اليسرى. أما التصفّح في غير موضع الورد فلا يُحسب ولا يحرّك الموضع
+// ---------- احتساب صفحات ورد القراءة ----------
+// الورد يمضي من موضعه فقط (lastPage): تُحسب صفحته تلقائيًا بعد مدة (dwell) أو بزر «قرأتُ هذه الصفحة» تحتها،
+// فيتقدّم الموضع صفحة؛ وفي العرض المزدوج اليمنى ثم اليسرى. والتصفّح في غير موضع الورد لا يُحسب ولا يحرّك الموضع.
+// وإن انتهى الورد عند نهاية سورة في وسط صفحة، يبدأ الورد التالي من أول السورة بعدها (lastAyah)
+const stoppedToday = () => lastAyah >= 0 && readOn(today()).includes(lastPage);
+function wirdTodo(vis) {
+  if (readerMode !== 'read' || !vis.includes(lastPage) || stoppedToday()) return [];
+  return vis.filter(p => p === lastPage || p === lastPage + 1);
+}
+// بدايات السور في وسط الصفحة (بعد موضع الورد إن كان فيها): يمكن إنهاء الورد عند نهاية السورة التي قبلها
+function surahStops(p) {
+  const [f, t] = pageB[p - 1], out = [];
+  for (let i = f + 1; i <= t; i++) if (ayahOf(i) === 1 && !(p === lastPage && i <= lastAyah)) out.push(i);
+  return out;
+}
+const prevSura = i => SURAS[suraOf[i] - 2][0];
+function readCell(p, todo) {
+  const done = readOn(today()).includes(p);
+  let main, extra = '';
+  if (stoppedToday() && p === lastPage) {
+    main = `<span class="ok">✓ انتهى ورد اليوم عند نهاية سورة ${prevSura(lastAyah)}</span>`;
+    extra = '<button class="lnk" data-rd="unstop">بل أتممتُ الصفحة كلها</button>';
+  } else if (todo.includes(p)) {
+    main = readMode === 'manual'
+      ? `<button class="btn pri" data-rd="read" data-p="${p}">✓ قرأتُ هذه الصفحة</button>`
+      : `<span class="rs" data-p="${p}">${p === todo[0] ? '' : 'تُحسب بعد الصفحة اليمنى'}</span>`;
+  } else if (done) {
+    main = '<span class="ok">✓ قُرئت اليوم ضمن الورد</span>';
+    if (readMode === 'manual' && p === lastPage - 1 && lastAyah < 0) extra = `<button class="lnk" data-rd="undo" data-p="${p}">تراجع</button>`;
+  } else main = '<span>تصفّح حر · لا يُحسب في ورد القراءة</span>';
+  const canStop = todo.includes(p) || (done && p === lastPage - 1 && lastAyah < 0) || (stoppedToday() && p === lastPage);
+  const stops = canStop ? surahStops(p) : [];
+  if (stops.length) extra += `<span class="rstops">${stoppedToday() && p === lastPage ? 'أو بعد' : 'أنهيتُ وردي بعد'} سورة: ` +
+    stops.map(i => `<button class="rchip" data-rd="stop" data-p="${p}" data-i="${i}">${prevSura(i)}</button>`).join('') + '</span>';
+  return `<div class="rcell"><div class="rmain">${main}</div>${extra ? `<div class="rextra">${extra}</div>` : ''}</div>`;
+}
+function drawReadCtl(todo) {
+  const vis = visiblePages(), today_ = `<span class="rtoday">اليوم: ${safahat(readCount(today()))}</span>`;
+  let html;
+  if (readerMode !== 'read') html = `<div class="rcell"><span>${readerMode === 'rev' ? '🔁 جلسة مراجعة' : '🧠 جلسة حفظ'} · لا تُحسب في ورد القراءة</span></div>`;
+  else html = vis.map(p => readCell(p, todo)).join(bookOn ? today_ : '');
+  if (bookOn) { $('rstat').innerHTML = readerMode !== 'read' || vis.length < 2 ? html + today_ : html; $('readSt').innerHTML = ''; }
+  else { $('readSt').innerHTML = html; $('rstat').innerHTML = ''; }
+}
+const readCtlText = () => (bookOn ? $('rstat') : $('readSt')).textContent;
+function afterReadChange(repaint) {
+  save(); dashboard(); updateReaderBar(); refreshPageActions();
+  if (repaint) repaintPages();
+  startReadTimer();
+}
+function readPage(p) {
+  markRead(p);
+  let rp = false;
+  if (p === lastPage) { lastPage = Math.min(PAGES_N, p + 1); rp = lastAyah >= 0; lastAyah = -1; }   // يتقدّم موضع الورد
+  afterReadChange(rp);
+}
 function startReadTimer() {
   clearInterval(readTimer); readTimer = null;
-  const st = $('readSt');
-  if (readerMode !== 'read') {
-    st.className = 'readst';
-    st.textContent = readerMode === 'rev' ? '🔁 جلسة مراجعة · لا تُحسب في ورد القراءة' : '🧠 جلسة حفظ · لا تُحسب في ورد القراءة';
-    return;
-  }
-  const vis = visiblePages();
-  const todo = vis.filter(p => p === lastPage || (p === lastPage + 1 && vis.includes(lastPage)));
-  if (!todo.length) {
-    const readHere = vis.some(p => readOn(today()).includes(p));
-    st.className = 'readst' + (readHere ? ' ok' : '');
-    st.textContent = readHere ? '✓ قُرئت اليوم ضمن الورد' : '📖 تصفّح حر · لا يُحسب في ورد القراءة';
-    return;
-  }
-  if (screen !== 'reader' || document.hidden) { st.className = 'readst'; st.textContent = ''; return; }
+  const todo = wirdTodo(visiblePages());
+  drawReadCtl(todo);
+  if (readMode !== 'timer' || !todo.length || screen !== 'reader' || document.hidden) return;
   readLeft = dwell;
   const tick = () => {
-    if (readLeft <= 0) {
-      const p = todo.shift();
-      markRead(p);
-      if (p === lastPage) lastPage = Math.min(PAGES_N, p + 1);   // يتقدّم موضع الورد
-      save(); refreshPageActions(); dashboard(); updateReaderBar();
-      if (!todo.length) {
-        clearInterval(readTimer); readTimer = null;
-        st.className = 'readst ok'; st.textContent = '✓ أُضيفت إلى ورد اليوم · تابع إلى ما بعدها';
-        return;
-      }
-      readLeft = dwell;
-    }
-    st.className = 'readst';
-    const which = todo.length > 1 ? 'الصفحة اليمنى' : vis.length > 1 && todo[0] === vis[1] ? 'الصفحة اليسرى' : 'الصفحة';
-    st.textContent = `تُسجَّل ${which} في ورد القراءة بعد ${ar(readLeft)} ث`;
+    if (readLeft <= 0) { readPage(todo[0]); return; }   // يُعاد التشغيل للصفحة التالية إن بقيت
+    const el = document.querySelector(`.rs[data-p="${todo[0]}"]`);
+    if (el) el.textContent = `تُسجَّل في ورد القراءة بعد ${ar(readLeft)} ث`;
     readLeft--;
   };
   tick();
   readTimer = setInterval(tick, 1000);
 }
+// أزرار تحت الصفحات: قرأتُها، تراجع، انتهى الورد عند نهاية سورة
+function onReadCtl(e) {
+  const b = e.target.closest('[data-rd]'); if (!b) return;
+  const p = +b.dataset.p, t = today();
+  switch (b.dataset.rd) {
+    case 'read': {   // قراءة اليسرى قبل اليمنى تعني قراءتهما معًا
+      const vis = visiblePages();
+      wirdTodo(vis).filter(q => q <= p).forEach(q => { markRead(q); if (q === lastPage) { lastPage = Math.min(PAGES_N, q + 1); } });
+      const rp = lastAyah >= 0; lastAyah = -1;
+      afterReadChange(rp); break;
+    }
+    case 'undo':
+      if (readLog[t]) { readLog[t] = readLog[t].filter(q => q !== p); if (!readLog[t].length) delete readLog[t]; }
+      lastPage = p; lastAyah = -1;
+      afterReadChange(false); break;
+    case 'stop': {
+      const i = +b.dataset.i;
+      for (let q = Math.min(lastPage, p); q <= p; q++) if (q >= lastPage || q === p) markRead(q);
+      lastPage = p; lastAyah = i;
+      afterReadChange(true); break;
+    }
+    case 'unstop':
+      lastPage = Math.min(PAGES_N, lastPage + 1); lastAyah = -1;
+      afterReadChange(true); break;
+  }
+}
+$('rstat').addEventListener('click', onReadCtl);
+$('readSt').addEventListener('click', onReadCtl);
 document.addEventListener('visibilitychange', () => { if (screen === 'reader') startReadTimer(); });
 
 function openReader(p, mode = 'read') {
@@ -918,7 +1089,7 @@ function wirdScreen() {
     `<div class="prog"><span style="width:${p * 100}%"></span></div>` +
     `<div style="font-size:14px">${n >= wird ? '<span class="done-msg">أتممتَ وردك اليوم ✓ تقبّل الله منك</span>' : `بقي ${safahat(wird - n)} لإتمام الورد`}</div>`;
   $('wPlan').textContent = `بهذا الورد تختم القرآن كل ${ayyamN(Math.ceil(PAGES_N / wird))} تقريبًا.`;
-  $('wContinue').textContent = `متابعة القراءة من صفحة ${ar(lastPage)}`;
+  $('wContinue').textContent = `متابعة القراءة من ${wirdPosTxt()}`;
 
   // الختمة: المدة المتوقعة بوردك المختار؛ ومعها معدلك الفعلي منذ بدء الختمة (آخر ٧ أيام منها) بعد ثلاثة أيام على الأقل
   const kp = khatmaPages().size, left = PAGES_N - kp;
@@ -934,16 +1105,17 @@ function wirdScreen() {
     `<div class="muted" style="font-size:12px;margin-top:4px">بدأت هذه الختمة ${ayyam(t - khatmaStart)}</div>`;
 
   // ورد الحفظ: الموضع والمقدار والمدة المتوقعة
-  const all = count(0, TOTAL - 1), hn = hifzCount(t), hLeft = TOTAL - all.h, nx = nextHifz(1)[0];
+  const all = count(0, TOTAL - 1), HM = METRICS.hifz, hn = HM.n(t), hg = HM.goal(), nx = nextHifz(1)[0];
+  const hLeft = TOTAL - all.h, hLeftU = hifzLeft();
   // معدل الأسبوع لا يُعتمد إلا بعد ثلاثة أيام حفظ على الأقل، وإلا فالورد المختار
-  const last7h = [...Array(7)].map((_, k) => hifzCount(t - k));
+  const last7h = [...Array(7)].map((_, k) => HM.n(t - k));
   const h7 = last7h.filter(Boolean).length >= 3 ? last7h.reduce((a, b) => a + b, 0) / 7 : 0;
   $('wHifz').innerHTML = hLeft
-    ? `<div class="wbig">${ar(hn)} <small>من ${ayat(hGoal)} اليوم</small></div>` +
-      `<div class="prog"><span style="width:${Math.min(1, hn / hGoal) * 100}%;background:var(--hifz)"></span></div>` +
+    ? `<div class="wbig">${numTxt(hn)} <small>من ${HM.unit(hg)} اليوم</small></div>` +
+      `<div class="prog"><span style="width:${Math.min(1, hn / hg) * 100}%;background:var(--hifz)"></span></div>` +
       `<div style="font-size:14px">موضعك في الحفظ: <b style="font-family:Amiri,serif;font-size:16px">${describeAyat([nx])}</b></div>` +
-      `<div class="muted" style="font-size:13px;margin-top:4px">بقي ${ayat(hLeft)} · ` +
-      (h7 > 0 ? `بمعدلك في آخر أسبوع تُتمّ الحفظ خلال ${duration(Math.ceil(hLeft / h7))}` : `بهذا الورد تُتمّ الحفظ خلال ${duration(Math.ceil(hLeft / hGoal))}`) + ' تقريبًا</div>' +
+      `<div class="muted" style="font-size:13px;margin-top:4px">بقي ${hByPage() ? pagesTxt(hLeftU) : ayat(hLeft)} · ` +
+      (h7 > 0 ? `بمعدلك في آخر أسبوع تُتمّ الحفظ خلال ${duration(Math.ceil(hLeftU / h7))}` : `بهذا الورد تُتمّ الحفظ خلال ${duration(Math.ceil(hLeftU / hg))}`) + ' تقريبًا</div>' +
       `<div class="wportion">${hifzToday.length ? `ورد اليوم: <span class="tgt">${describeAyat(hifzToday)}</span>` : '<span class="done-msg">أتممتَ ورد الحفظ اليوم ✓</span>'}</div>`
     : '<div class="done-msg">🎉 أتممتَ حفظ القرآن الكريم، تقبّل الله منك</div>';
   $('wHifzOpen').disabled = $('wHifzDone').disabled = !hifzToday.length;
@@ -954,7 +1126,9 @@ function wirdScreen() {
     ? `<div class="wbig">${ar(vn)} <small>من ${ayat(q)} اليوم</small></div>` +
       `<div class="prog"><span style="width:${Math.min(1, vn / q) * 100}%;background:var(--both)"></span></div>` +
       `<div style="font-size:14px">${all.d ? `<b class="red">${ayat(all.d)}</b> مستحقة للمراجعة الآن` : 'لا مراجعة مستحقة الآن ✓'}</div>` +
-      `<div class="muted" style="font-size:13px;margin-top:4px">مقدار المراجعة اليومي = محفوظك (${ayat(all.h)}) ÷ ${ayyamN(cycle)}</div>` +
+      `<div class="muted" style="font-size:13px;margin-top:4px">${hasCustomIvl()
+        ? `مقدار المراجعة اليومي من محفوظك (${ayat(all.h)})، كلٌّ بموعد مراجعته: العام (${cycleName(cycle)}) أو الخاص الذي حدّدته له`
+        : `مقدار المراجعة اليومي = محفوظك (${ayat(all.h)}) ÷ ${ayyamN(cycle)}`}</div>` +
       (revToday.length ? `<div class="wportion">ورد اليوم: <span class="tgt">${describePages(revToday)}</span></div>` : '')
     : '<div class="muted" style="font-size:14px">سجّل محفوظك من الخريطة ليُحسب ورد المراجعة اليومي تلقائيًا.</div>';
   $('wRevOpen').disabled = $('wRevDone').disabled = !revToday.length;
@@ -970,15 +1144,17 @@ const KPI_TXT = {
   rev:  ['أيام متتالية أتممت فيها ورد المراجعة', 'متوسط الآيات المُراجَعة يوميًا (آخر ٧ أيام)', 'آية راجعتها في آخر ٣٠ يومًا', 'يومًا أتممت فيه ورد المراجعة'],
 };
 function metricPanel() {
-  const m = METRICS[metric], goal = m.goal(), t = today(), L = KPI_TXT[metric];
+  const m = METRICS[metric], goal = m.goal(), t = today();
+  let L = KPI_TXT[metric];
+  if (metric === 'hifz' && hByPage()) L = [L[0], 'متوسط الصفحات المحفوظة يوميًا (آخر ٧ أيام)', 'صفحة حفظتها في آخر ٣٠ يومًا', L[3]];
   const days = [...Array(30)].map((_, k) => t - 29 + k), counts = days.map(m.n);
-  const total = counts.reduce((a, b) => a + b, 0), met = goal ? counts.filter(c => c >= goal).length : 0;
+  const total = counts.reduce((a, b) => a + b, 0), nMet = goal ? counts.filter(c => met(m, c, goal)).length : 0;
   const avg7 = counts.slice(-7).reduce((a, b) => a + b, 0) / 7;
   $('wKpis').innerHTML =
     `<div class="kpi"><div class="v">${ar(streakOf(m, goal))}</div><div class="l">${L[0]}</div></div>` +
     `<div class="kpi"><div class="v">${ar(+avg7.toFixed(1))}</div><div class="l">${L[1]}</div></div>` +
-    `<div class="kpi"><div class="v">${ar(total)}</div><div class="l">${L[2]}</div></div>` +
-    `<div class="kpi"><div class="v">${ar(met)}/${ar(30)}</div><div class="l">${L[3]}</div></div>`;
+    `<div class="kpi"><div class="v">${numTxt(total)}</div><div class="l">${L[2]}</div></div>` +
+    `<div class="kpi"><div class="v">${ar(nMet)}/${ar(30)}</div><div class="l">${L[3]}</div></div>`;
   document.querySelectorAll('#metricSeg button').forEach(b => b.classList.toggle('on', b.dataset.m === metric));
   drawChart(days, counts, goal);
 }
@@ -994,7 +1170,7 @@ function drawChart(days, counts, goal) {
   const W = 640, H = 230, padR = 40, padL = 8, padT = 12, padB = 26;
   const max = Math.max(goal, ...counts, 1);
   // خطوة «لطيفة» للمحور بحيث لا تزيد الخطوط على ستة
-  const step = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000].find(s => max * 1.15 / s <= 6) || 5000;
+  const step = [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000].find(s => max * 1.15 / s <= 6 && (s >= 1 || !Number.isInteger(goal))) || 5000;
   const top = Math.ceil(max * 1.15 / step) * step;
   const iw = W - padR - padL, ih = H - padT - padB, bw = iw / days.length;
   const y = v => padT + ih - v / top * ih;
@@ -1010,7 +1186,7 @@ function drawChart(days, counts, goal) {
     if (c > 0) {
       const h = Math.max(3, y(0) - y(c)), r = Math.min(4, w / 2, h);
       const yy = y(0) - h;   // عمود بحافة علوية مستديرة وقاعدة مستقيمة على خط الصفر
-      bars += `<path d="M${x},${y(0)} V${yy + r} Q${x},${yy} ${x + r},${yy} H${x + w - r} Q${x + w},${yy} ${x + w},${yy + r} V${y(0)} Z" fill="${goal && c >= goal ? 'var(--accent)' : 'var(--bar-low)'}"/>`;
+      bars += `<path d="M${x},${y(0)} V${yy + r} Q${x},${yy} ${x + r},${yy} H${x + w - r} Q${x + w},${yy} ${x + w},${yy + r} V${y(0)} Z" fill="${met(METRICS[metric], c, goal) ? 'var(--accent)' : 'var(--bar-low)'}"/>`;
     }
     hits += `<rect class="hit" data-k="${k}" x="${xOf(k)}" y="${padT}" width="${bw}" height="${ih}"/>`;
     if (k % 5 === 4 || k === counts.length - 1) {
@@ -1028,7 +1204,7 @@ $('chart').addEventListener('pointermove', e => {
   if (!h) { tip.style.display = 'none'; return; }
   const m = METRICS[metric], goal = m.goal();
   const d = JSON.parse($('chart').dataset.days)[+h.dataset.k], c = m.n(d);
-  showTip(e, `${dayLabel(d)}: ${c ? m.unit(c) : 'لا شيء'}${goal && c >= goal ? ' ✓' : ''}`);
+  showTip(e, `${dayLabel(d)}: ${c ? m.unit(c) : 'لا شيء'}${met(m, c, goal) ? ' ✓' : ''}`);
 });
 $('chart').addEventListener('pointerleave', () => tip.style.display = 'none');
 
@@ -1080,7 +1256,7 @@ $('mLog').onclick = () => {
   const [lo, hi] = a < b ? [a, b] : [b, a], d = today() - +$('mDay').value;
   let added = 0;
   for (let p = lo; p <= hi; p++) if (markRead(p, d)) added++;
-  if (hi >= lastPage) lastPage = Math.min(PAGES_N, hi + 1);
+  if (hi >= lastPage) { lastPage = Math.min(PAGES_N, hi + 1); lastAyah = -1; }
   save(); refreshAll();
   $('mMsg').textContent = added ? `سُجّلت ${safahat(added)} ✓` : 'هذه الصفحات مسجّلة من قبل';
 };
@@ -1099,12 +1275,12 @@ $('kPage').oninput = () => { const p = int($('kPage').value, 1, PAGES_N); if (p)
 $('kCancel').onclick = () => { $('kSet').hidden = true; };
 $('kSave').onclick = () => {
   const p = int($('kPage').value, 1, PAGES_N); if (!p) return;
-  lastPage = p; khatmaPre = p - 1; khatmaStart = today();
+  lastPage = p; lastAyah = -1; khatmaPre = p - 1; khatmaStart = today();
   $('kSet').hidden = true; save(); refreshAll();
 };
 $('kNew').onclick = () => {
   if (!confirm('ستبدأ ختمة جديدة من سورة الفاتحة، ويبقى سجل قراءتك السابق محفوظًا. هل تريد المتابعة؟')) return;
-  lastPage = 1; khatmaPre = 0; khatmaStart = today();
+  lastPage = 1; lastAyah = -1; khatmaPre = 0; khatmaStart = today();
   $('kSet').hidden = true; save(); refreshAll();
 };
 
@@ -1195,6 +1371,7 @@ function refreshBulk() {
   document.querySelector('[data-bact="1"]').lastChild.textContent = all(1) ? 'إلغاء الحفظ' : 'حفظ';
   document.querySelector('[data-bact="2"]').lastChild.textContent = all(2) ? 'إلغاء الفهم' : 'فهم';
   $('bRev').disabled = !ids.some(i => state[i] & 1);
+  drawIvlSel($('bIvl'), ids);
   $('bClear').disabled = !n;
   const max = GROUPS[view].length;
   $('bFrom').max = $('bTo').max = max;
@@ -1256,6 +1433,7 @@ document.querySelectorAll('[data-bact]').forEach(b => b.addEventListener('click'
   applyAct(pickedAyat(), +b.dataset.bact); picked.clear(); save(); refreshAll();
 }));
 $('bRev').onclick = () => { applyReview(pickedAyat()); picked.clear(); save(); refreshAll(); };
+$('bIvl').onchange = e => { applyIvl(pickedAyat(), +e.target.value); save(); refreshAll(); };
 
 // ---------- تطبيق التسجيل (مشترك) ----------
 function applyAct(ids, act) {
@@ -1269,12 +1447,22 @@ function applyAct(ids, act) {
   ids.forEach(i => {
     const was = state[i] & 1;
     state[i] = op(state[i]);
-    if (!(state[i] & 1)) { rev[i] = 0; todayH.delete(i); }
+    if (!(state[i] & 1)) { rev[i] = 0; ivl[i] = 0; todayH.delete(i); }
     else if (!was) { rev[i] = t; if (fresh) todayH.add(i); }
   });
   if (todayH.size) hifzLog[t] = [...todayH]; else delete hifzLog[t];
 }
 // تُحسب الآية مرة واحدة في اليوم، ولا يُعدّ الحفظ الجديد مراجعة
+// موعد المراجعة الخاص: يُطبَّق على المحفوظ من الآيات المحددة فقط
+function applyIvl(ids, k) { ids.forEach(i => { if (state[i] & 1) ivl[i] = k; }); }
+function drawIvlSel(el, ids) {
+  const h = ids.filter(i => state[i] & 1), ks = new Set(h.map(i => ivl[i]));
+  el.innerHTML = (ks.size > 1 ? '<option value="" hidden>مواعيد مختلفة</option>' : '') +
+    RCYC.map((_, k) => `<option value="${k}">${ivlName(k)}</option>`).join('');
+  el.value = ks.size === 1 ? [...ks][0] : '';
+  el.disabled = !h.length;
+  el.closest('label').title = h.length ? 'موعد مراجعة خاص بالمحفوظ المحدد، بدل الإعداد العام (للمحفوظ القديم الثابت مثلًا)' : 'حدّد آيات محفوظة لتختار موعد مراجعتها';
+}
 function applyReview(ids) {
   const t = today();
   let n = 0;
@@ -1346,7 +1534,7 @@ function refreshSheet() {
   for (let i = g.from; i <= g.to; i++) {
     const el = aEls[i];
     el.className = `a s${state[i]}${isDue(i) ? ' due' : ''}${sel.has(i) ? ' sel' : ''}`;
-    el.title = `${SURAS[suraOf[i] - 1][0]} ${ar(ayahOf(i))}` + ((state[i] & 1) ? ` · آخر مراجعة: ${ayyam(t - rev[i])}` : '');
+    el.title = `${SURAS[suraOf[i] - 1][0]} ${ar(ayahOf(i))}` + ((state[i] & 1) ? ` · آخر مراجعة: ${ayyam(t - rev[i])}` + (ivl[i] ? ` · تُراجَع ${cycleName(RCYC[ivl[i]])}` : '') : '');
   }
   const n = sel.size, ids = [...sel];
   $('cnt').textContent = n ? `المحدد: ${ayat(n)}` : 'حدّد آيات لتسجيلها';
@@ -1355,6 +1543,7 @@ function refreshSheet() {
   document.querySelector('[data-act="1"]').lastChild.textContent = all(1) ? 'إلغاء الحفظ' : 'حفظ';
   document.querySelector('[data-act="2"]').lastChild.textContent = all(2) ? 'إلغاء الفهم' : 'فهم';
   $('revBtn').disabled = !ids.some(i => state[i] & 1);
+  drawIvlSel($('sIvl'), ids);
   $('sTafsir').hidden = n !== 1;   // تفسير آية واحدة محددة داخل التطبيق
   $('selAll').textContent = n === c.n ? 'إلغاء التحديد' : 'تحديد الكل';
 }
@@ -1384,6 +1573,7 @@ window.addEventListener('pointerup', () => drag = null);
 function afterChange() { sel.clear(); save(); refreshAll(); refreshSheet(); }
 document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => { applyAct([...sel], +b.dataset.act); afterChange(); }));
 $('revBtn').onclick = () => { applyReview([...sel]); afterChange(); };
+$('sIvl').onchange = e => { applyIvl([...sel], +e.target.value); save(); refreshAll(); refreshSheet(); };
 $('selAll').onclick = () => {
   const g = GROUPS[sView][cur];
   if (sel.size === g.to - g.from + 1) sel.clear();
@@ -1505,15 +1695,18 @@ document.head.append(tfStyle);
 function openTafsir(i) {
   tfAyah = i;
   tfStyle.textContent = `.w[data-i="${i}"]{background:color-mix(in srgb,var(--both) 32%,transparent)!important}`;
-  if ($('tfPanel').hidden) {
-    $('tfPanel').hidden = false;
+  if (!tfIsOpen()) {
+    $('tfPanel').classList.add('open');           // تنزلق اللوحة من اليسار
+    $('tfPanel').setAttribute('aria-hidden', 'false');
     $('reader').classList.add('tf-open');
     relayoutReader();   // ليُعاد حساب مقاس الكتاب بجوار اللوحة
   }
   drawTafsir();
 }
+const tfIsOpen = () => $('tfPanel').classList.contains('open');
 function closeTafsir() {
-  $('tfPanel').hidden = true;
+  $('tfPanel').classList.remove('open');
+  $('tfPanel').setAttribute('aria-hidden', 'true');
   $('reader').classList.remove('tf-open');
   tfStyle.textContent = '';
   tfAyah = -1;
@@ -1572,7 +1765,7 @@ $('tfFahm').onclick = () => {
   if (tfAyah < 0) return;
   applyAct([tfAyah], 2); save(); refreshAll(); refreshPageActions(); drawTafsir();
 };
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('tfPanel').hidden && cur < 0) closeTafsir(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && tfIsOpen() && cur < 0) closeTafsir(); });
 
 // الضغط على كلمة يفتح تفسير آيتها؛ والسحب (لتقليب الصفحة) لا يُعدّ ضغطًا
 let downXY = null;
@@ -1703,10 +1896,25 @@ const closeCtx = () => { $('ctx').hidden = true; ctxI = -1; };
   e.preventDefault();
   openCtx(+w.dataset.i, e.clientX, e.clientY);
 }));
+// الزر الأيمن على نص محدَّد في لوحة التفسير: نسخ المحدَّد
+let ctxText = '';
+$('tfPanel').addEventListener('contextmenu', e => {
+  const s = String(getSelection() || '').trim();
+  if (!s || !e.target.closest('.tfa,.tfb')) return;
+  e.preventDefault();
+  ctxText = s; ctxI = -1;
+  const m = $('ctx');
+  m.innerHTML = '<button class="ci" data-act="copySel">📋 نسخ النص المحدَّد</button>';
+  m.hidden = false;
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.max(8, Math.min(e.clientX, innerWidth - r.width - 8)) + 'px';
+  m.style.top = Math.max(8, Math.min(e.clientY, innerHeight - r.height - 8)) + 'px';
+});
 $('ctx').addEventListener('click', e => {
   const a = e.target.closest('[data-act]'); if (!a) return;
   const i = ctxI; closeCtx();
-  if (a.dataset.act === 'tafsir') openTafsir(i);
+  if (a.dataset.act === 'copySel') copyText(ctxText);
+  else if (a.dataset.act === 'tafsir') openTafsir(i);
   else copyText(ayahCopyText(i));
 });
 // نص الآية للنسخ: بالرسم العثماني وتشكيله كما هو، بين القوسين المزخرفين، ثم اسم السورة ورقم الآية
@@ -1734,12 +1942,14 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('ctx').
 addEventListener('blur', closeCtx);
 
 // ---------- قسم المرجعيات ----------
-let rcSel = 0;   // ٠ = كل المرجعيات
+let rcSel = 0;   // ٠ = كل المرجعيات، -١ = آخر ما زرت
 function refsScreen() {
-  if (rcSel && !refs.cats.some(c => c.id === rcSel)) rcSel = 0;
+  if (rcSel > 0 && !refs.cats.some(c => c.id === rcSel)) rcSel = 0;
   const n = id => refs.items.filter(x => !id || x.c === id).length;
   $('rcList').innerHTML = [{ id: 0, name: 'كل المرجعيات' }, ...refs.cats].map(c =>
-    `<button class="rc${c.id === rcSel ? ' on' : ''}" data-rc="${c.id}"><span>${escHtml(c.name)}</span><b>${ar(n(c.id))}</b></button>`).join('');
+    `<button class="rc${c.id === rcSel ? ' on' : ''}" data-rc="${c.id}"><span>${escHtml(c.name)}</span><b>${ar(n(c.id))}</b></button>`).join('') +
+    `<div class="rcsep"></div><button class="rc${rcSel === -1 ? ' on' : ''}" data-rc="-1"><span>🕘 آخر ما زرت</span><b>${ar(recent.length)}</b></button>`;
+  if (rcSel === -1) { recentList(); return; }
   const cat = refs.cats.find(c => c.id === rcSel);
   $('rcTitle').value = cat ? cat.name : 'كل المرجعيات';
   $('rcTitle').readOnly = !cat;
@@ -1759,6 +1969,34 @@ function refsScreen() {
       <div class="row"><button class="btn" data-go="open">افتح في المصحف</button><button class="btn" data-go="tafsir">التفسير</button><button class="lnk" data-go="del">إزالة من التصنيف</button></div>
     </div>`).join('');
 }
+// آخر ما زرت: مجمّعة بحسب اليوم، ولكل موضع سورته وجزؤه وأول آية في صفحته
+function recentList() {
+  $('rcTitle').value = '🕘 آخر ما زرت'; $('rcTitle').readOnly = true; $('rcTools').hidden = true;
+  $('rcCount').textContent = recent.length ? `آخر ${safahat(recent.length)} تصفّحتها خارج الورد` : '';
+  if (!recent.length) { $('riList').innerHTML = '<div class="rempty">لم تتصفّح شيئًا خارج وردك بعد.<br>كل صفحة تبقى عليها في المصحف أربع ثوانٍ فأكثر بعيدًا عن موضع الورد تظهر هنا.</div>'; return; }
+  let html = '', lastG = null;
+  recent.forEach(x => {
+    const d = x.t ? today() - Math.floor((x.t - new Date(x.t).getTimezoneOffset() * 6e4) / 864e5) : null;
+    const g = d === null ? 'من قبل' : d === 0 ? 'اليوم' : d === 1 ? 'أمس' : ayyam(d);
+    if (g !== lastG) { html += `<div class="rgrp">${g}</div>`; lastG = g; }
+    const f = pageB[x.p - 1][0];
+    html += `<div class="ri rvi" data-p="${x.p}">
+      <div class="rmeta"><b>${pageSura(x.p)}</b> · صفحة ${ar(x.p)} · الجزء ${ar(juzOf[f])}${x.t ? ` · ${agoTxt(x.t)}` : ''}</div>
+      <div class="rtxt rfirst">${escHtml(AYAT[f])} <span class="anum">﴿${ar(ayahOf(f))}﴾</span></div>
+      <div class="row"><button class="btn" data-gp="open">افتح في المصحف</button><button class="lnk" data-gp="del">إزالة من القائمة</button></div>
+    </div>`;
+  });
+  $('riList').innerHTML = html + '<div class="row" style="justify-content:center"><button class="lnk" data-gp="clear">مسح القائمة كلها</button></div>';
+}
+$('riList').addEventListener('click', e => {
+  const b = e.target.closest('[data-gp]'); if (!b) return;
+  const p = +b.closest('[data-p]')?.dataset.p;
+  if (b.dataset.gp === 'open') { openReader(p); return; }
+  if (b.dataset.gp === 'del') recent = recent.filter(x => x.p !== p);
+  if (b.dataset.gp === 'clear') { if (!confirm('مسح قائمة «آخر ما زرت» كلها؟')) return; recent = []; }
+  try { localStorage.setItem(KEY + '.recent', JSON.stringify(recent)); } catch (err) {}
+  deskSave(); refsScreen();
+});
 $('rcList').addEventListener('click', e => { const b = e.target.closest('[data-rc]'); if (b) { rcSel = +b.dataset.rc; refsScreen(); } });
 $('rcNew').addEventListener('submit', e => {
   e.preventDefault();
@@ -1790,80 +2028,130 @@ $('riList').addEventListener('input', e => {
 $('riList').addEventListener('click', e => {
   const b = e.target.closest('[data-go]'); if (!b) return;
   const card = b.closest('.ri'), i = +card.dataset.i;
+  if (!card.dataset.i) return;
   if (b.dataset.go === 'del') { toggleRef(i, +card.dataset.c); refsScreen(); return; }
   openReader(pageOf[i]);
   setTimeout(() => openTafsir(i), 350);
 });
 
 // ======================================================================
-//  تنبيهات الأوراد (في تطبيق سطح المكتب)
+//  المنبهات (في تطبيق سطح المكتب)
 // ======================================================================
-// تفحص الواجهة كل نصف دقيقة: إذا حلّ وقت ورد ولم يكتمل، تطلب من التطبيق إظهار نافذة التنبيه.
-// «بعد ١٥ دقيقة» يعيده بعدها؛ وتركه دون اختيار يعيده كذلك حتى ثلاث مرات؛ و«ليس اليوم» يوقفه لليوم
-const REM_TITLE = { read: '📖 ورد القراءة', hifz: '🧠 ورد الحفظ', rev: '🔁 ورد المراجعة' };
+// تفحص الواجهة كل نصف دقيقة: إذا حلّ وقت منبّه في يوم من أيامه، تطلب من التطبيق إظهار نافذة التنبيه
+// (ومنبّه الورد لا يظهر إن اكتمل الورد). «بعد ١٥ دقيقة» يعيده بعدها؛ وتركه دون اختيار يعيده كذلك حتى ثلاث مرات؛
+// و«ليس اليوم» يوقفه لليوم. سجلّ اليوم (remLog) مفاتيحه أرقام المنبهات
 let remLog = { day: 0, sent: {}, snooze: {}, auto: {} };
 try { const o = JSON.parse(localStorage.getItem(KEY + '.remlog')); if (o && o.day === today()) remLog = { sent: {}, snooze: {}, auto: {}, ...o }; } catch (e) {}
+// سجلّ الإصدارات السابقة كان بنوع الورد: يُنقل إلى رقم المنبّه حتى لا يتكرر تنبيه ظهر اليوم
+['read', 'hifz', 'rev'].forEach(k => ['sent', 'snooze', 'auto'].forEach(f => {
+  if (!(k in remLog[f])) return;
+  const r = remind.find(x => x.kind === k);
+  if (r) remLog[f][r.id] = remLog[f][k];
+  delete remLog[f][k];
+}));
 const saveRemLog = () => { try { localStorage.setItem(KEY + '.remlog', JSON.stringify(remLog)); } catch (e) {} };
-function wirdLeft(kind) {
+const suraName = s => SURAS[s - 1][0];
+function remBody(r) {
   const t = today();
-  if (kind === 'read') { const n = readCount(t); return n < wird ? `بقي ${safahat(wird - n)} من وردك اليوم، تبدأ من صفحة ${ar(lastPage)}.` : null; }
-  if (kind === 'hifz') { const ids = nextHifz(hGoal - hifzCount(t)); return ids.length ? `ورد اليوم: ${describeAyat(ids)}.` : null; }
-  const ps = reviewPortion();
-  return ps.length ? `ورد اليوم: ${describePages(ps)}.` : null;
+  if (r.kind === 'read') { const n = readCount(t); return n < wird ? `بقي ${safahat(wird - n)} من وردك اليوم، تبدأ من ${wirdPosTxt()}.` : null; }
+  if (r.kind === 'hifz') { const ids = hifzPortion(); return ids.length ? `ورد اليوم: ${describeAyat(ids)}.` : null; }
+  if (r.kind === 'rev') { const ps = reviewPortion(); return ps.length ? `ورد اليوم: ${describePages(ps)}.` : null; }
+  if (r.kind === 'sura') return `حان وقت قراءة سورة ${suraName(r.sura)}.`;
+  return r.text || 'تذكير من «صاحبُك القرآن».';
 }
+const remTitle = r => r.kind === 'sura' ? `📗 سورة ${suraName(r.sura)}` : r.kind === 'note' ? `⏰ ${r.text || 'تذكير'}` : REM_KINDS[r.kind];
 function checkReminders() {
   if (!DESK) return;
-  const t = today(), now = new Date(), hm = now.getHours() * 60 + now.getMinutes();
+  const t = today(), now = new Date(), hm = now.getHours() * 60 + now.getMinutes(), wd = now.getDay();
   if (remLog.day !== t) remLog = { day: t, sent: {}, snooze: {}, auto: {} };
-  for (const kind of ['hifz', 'rev', 'read']) {
-    const r = remind[kind];
-    if (!r.on) continue;
+  for (const r of remind) {
+    if (!r.on || (r.days.length && !r.days.includes(wd))) continue;
     const [h, m] = r.time.split(':').map(Number);
     if (hm < h * 60 + m) continue;
-    const snoozed = remLog.snooze[kind];
-    if (remLog.sent[kind] && !(snoozed && Date.now() >= snoozed)) continue;
-    remLog.sent[kind] = true; delete remLog.snooze[kind];
-    const body = wirdLeft(kind);
-    if (body) DESK.showReminder({ kind, title: REM_TITLE[kind], body });
+    const snoozed = remLog.snooze[r.id];
+    if (remLog.sent[r.id] && !(snoozed && Date.now() >= snoozed)) continue;
+    remLog.sent[r.id] = true; delete remLog.snooze[r.id];
+    const body = remBody(r);
+    if (body) DESK.showReminder({ kind: 'r' + r.id, title: remTitle(r), body });
   }
   saveRemLog();
 }
-function openForKind(kind) {
+function openForRem(r) {
   dashboard();   // يحسب مقدار الحفظ والمراجعة الحالي
-  if (kind === 'hifz' && hifzToday.length) openReader(pageOf[hifzToday[0]], 'hifz');
-  else if (kind === 'rev' && revToday.length) openReader(revToday[0], 'rev');
+  if (!r) { showScreen('home'); return; }
+  if (r.kind === 'hifz' && hifzToday.length) openReader(pageOf[hifzToday[0]], 'hifz');
+  else if (r.kind === 'rev' && revToday.length) openReader(revToday[0], 'rev');
+  else if (r.kind === 'sura') openReader(pageOf[start[r.sura]]);
+  else if (r.kind === 'note') showScreen('home');
   else openReader(lastPage);
 }
 if (DESK) {
   DESK.onReminderAction(({ kind, action }) => {
-    if (action === 'snooze') remLog.snooze[kind] = Date.now() + 15 * 60000;
-    if (action === 'auto' && (remLog.auto[kind] = (remLog.auto[kind] || 0) + 1) <= 3) remLog.snooze[kind] = Date.now() + 15 * 60000;
-    if (action === 'open') openForKind(kind);
+    const id = +String(kind).replace(/^r/, ''), r = remind.find(x => x.id === id);
+    if (action === 'snooze') remLog.snooze[id] = Date.now() + 15 * 60000;
+    if (action === 'auto' && (remLog.auto[id] = (remLog.auto[id] || 0) + 1) <= 3) remLog.snooze[id] = Date.now() + 15 * 60000;
+    if (action === 'open') openForRem(r);
     saveRemLog();
   });
   setTimeout(checkReminders, 5000);
   setInterval(checkReminders, 30000);
-  // الإعدادات في شاشة الورد
-  const drawRem = () => {
-    document.querySelectorAll('[data-rk]').forEach(c => { c.checked = remind[c.dataset.rk].on; });
-    document.querySelectorAll('[data-rt]').forEach(i => { i.value = remind[i.dataset.rt].time; i.disabled = !remind[i.dataset.rt].on; });
-  };
-  drawRem();
-  $('remCard').addEventListener('change', e => {
-    const c = e.target;
-    if (c.dataset.rk) remind[c.dataset.rk].on = c.checked;
-    else if (c.dataset.rt && /^\d\d:\d\d$/.test(c.value)) remind[c.dataset.rt].time = c.value;
-    else if (c.id === 'autoStart') { DESK.setAutostart(c.checked); return; }
-    else return;
-    // تغيير الوقت أو التشغيل يُعيد إتاحة تنبيه اليوم
-    const k = c.dataset.rk || c.dataset.rt;
-    delete remLog.sent[k]; delete remLog.snooze[k]; saveRemLog();
-    save(); drawRem();
-  });
   $('autoStart').checked = DESK.getAutostart();
+  $('autoStart').onchange = e => DESK.setAutostart(e.target.checked);
   $('keepTray').checked = DESK.getKeepInTray();
   $('keepTray').onchange = e => DESK.setKeepInTray(e.target.checked);
 }
+
+// ---------- قائمة المنبهات في الإعدادات ----------
+const WDAYS = [[6, 'س', 'السبت'], [0, 'ح', 'الأحد'], [1, 'ن', 'الاثنين'], [2, 'ث', 'الثلاثاء'], [3, 'ر', 'الأربعاء'], [4, 'خ', 'الخميس'], [5, 'ج', 'الجمعة']];
+const suraOptsAll = SURAS.map((x, k) => `<option value="${k + 1}">${ar(k + 1)}. ${x[0]}</option>`).join('');
+function drawRemList() {
+  const box = $('remList');
+  if (!remind.length) { box.innerHTML = '<div class="remempty">لا منبهات بعد. أضف منبّهًا لورد القراءة أو الحفظ أو المراجعة، أو لسورة بعينها (كالكهف يوم الجمعة)، أو تذكيرًا تكتبه.</div>'; return; }
+  box.innerHTML = remind.map(r => `<div class="remi${r.on ? '' : ' off'}" data-id="${r.id}">
+      <input type="checkbox" class="tog" data-f="on" ${r.on ? 'checked' : ''} aria-label="تشغيل المنبّه">
+      <select data-f="kind" aria-label="نوع المنبّه">${Object.entries(REM_KINDS).map(([k, v]) => `<option value="${k}"${k === r.kind ? ' selected' : ''}>${v}</option>`).join('')}</select>
+      ${r.kind === 'sura' ? `<select data-f="sura" aria-label="السورة">${suraOptsAll}</select>` : ''}
+      ${r.kind === 'note' ? `<input type="text" data-f="text" maxlength="80" placeholder="نص التذكير، مثل: أذكار المساء" value="${escHtml(r.text)}">` : ''}
+      <input type="time" data-f="time" value="${r.time}" aria-label="الوقت">
+      <span class="days" aria-label="الأيام">${WDAYS.map(([d, s, n]) => `<button type="button" data-day="${d}" class="${r.days.includes(d) ? 'on' : ''}" title="${n}">${s}</button>`).join('')}<em>${r.days.length ? '' : 'كل يوم'}</em></span>
+      <button class="ib" data-f="del" title="حذف المنبّه">✕</button>
+    </div>`).join('');
+  remind.forEach(r => { if (r.kind === 'sura') box.querySelector(`[data-id="${r.id}"] [data-f="sura"]`).value = r.sura; });
+  if (!DESK) box.querySelectorAll('input,select,button').forEach(x => { x.disabled = true; });
+}
+// أي تعديل في منبّه يُعيد إتاحة تنبيهه اليوم
+function remChanged(r, redraw = true) {
+  delete remLog.sent[r.id]; delete remLog.snooze[r.id]; delete remLog.auto[r.id]; saveRemLog();
+  save(); if (redraw) drawRemList();
+}
+const remOf = el => remind.find(x => x.id === +el.closest('[data-id]').dataset.id);
+$('remList').addEventListener('change', e => {
+  const f = e.target.dataset.f; if (!f) return;
+  const r = remOf(e.target);
+  if (f === 'on') r.on = e.target.checked;
+  else if (f === 'kind') r.kind = e.target.value;
+  else if (f === 'sura') r.sura = +e.target.value;
+  else if (f === 'time' && okTime(e.target.value)) r.time = e.target.value;
+  else if (f === 'text') r.text = e.target.value.trim().slice(0, 80);
+  remChanged(r, f !== 'text');
+});
+$('remList').addEventListener('click', e => {
+  const b = e.target.closest('[data-day],[data-f="del"]'); if (!b) return;
+  const r = remOf(b);
+  if (b.dataset.f === 'del') { remind = remind.filter(x => x !== r); save(); drawRemList(); return; }
+  const d = +b.dataset.day;
+  r.days = r.days.includes(d) ? r.days.filter(x => x !== d) : [...r.days, d].sort();
+  if (r.days.length === 7) r.days = [];   // كل الأيام = كل يوم
+  remChanged(r);
+});
+$('remAdd').onclick = () => {
+  const used = new Set(remind.map(r => r.kind));
+  const kind = ['read', 'hifz', 'rev'].find(k => !used.has(k)) || 'read';
+  const id = Math.max(0, ...remind.map(r => r.id)) + 1;
+  remind.push({ id, kind, on: true, time: { read: '20:00', hifz: '06:00', rev: '17:00' }[kind], days: [], sura: 18, text: '' });
+  remChanged(remind[remind.length - 1]);
+  $('remList').lastElementChild.querySelector('input[type=time]').focus();
+};
 
 // ======================================================================
 //  الشاشات
@@ -1905,7 +2193,7 @@ function refreshAll() {
 //  النسخة الاحتياطية
 // ======================================================================
 function exportBackup() {
-  const data = { app: 'quran-map', v: 4, date: new Date().toISOString(), state: state.join(''), rev: [...rev], cycle, readLog, wird, lastPage, khatmaStart, khatmaPre, hifzLog, revLog, hGoal, hDir, refs };
+  const data = { app: 'quran-map', v: 4, date: new Date().toISOString(), state: state.join(''), rev: [...rev], cycle, readLog, wird, lastPage, khatmaStart, khatmaPre, hifzLog, revLog, hGoal, hDir, refs, lastAyah, ivl: ivl.join(''), hUnit, hGoalP };
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -1937,6 +2225,10 @@ function parseBackup(d) {
     revLog: opt(d.revLog, cleanRLog, {}),
     hGoal: opt(d.hGoal, oneOf(HGOALS), hGoal),
     hDir: opt(d.hDir, cleanDir, hDir),
+    lastAyah: opt(d.lastAyah, v => int(v, -1, TOTAL - 1), -1),
+    ivl: opt(d.ivl, cleanIvl, '0'.repeat(TOTAL)),
+    hUnit: opt(d.hUnit, v => v === 'a' || v === 'p' ? v : null, hUnit),
+    hGoalP: opt(d.hGoalP, oneOf(HGOALPS), hGoalP),
   };
   if (Object.values(out).includes(null)) return null;
   out.date = typeof d.date === 'string' ? d.date : null;
@@ -1958,10 +2250,11 @@ $('file').onchange = async e => {
   const t = today();
   for (let i = 0; i < TOTAL; i++) {
     state[i] = +d.state[i];
-    rev[i] = d.rev[i] || 0;
+    rev[i] = d.rev[i] || 0; ivl[i] = +d.ivl[i];
     if ((state[i] & 1) && !rev[i]) rev[i] = t;
   }
-  ({ cycle, readLog, wird, lastPage, khatmaStart, khatmaPre, hifzLog, revLog, hGoal, hDir, refs } = d);
+  ({ cycle, readLog, wird, lastPage, lastAyah, khatmaStart, khatmaPre, hifzLog, revLog, hGoal, hDir, refs, hUnit, hGoalP } = d);
+  if (lastAyah >= 0 && pageOf[lastAyah] !== lastPage) lastAyah = -1;
   save(); syncControls(); renderMap(); refreshAll();
 };
 
@@ -1980,6 +2273,9 @@ function backupCard() {
 function syncControls() {
   $('cycle').value = cycle; $('wirdSel').value = wird;
   $('hGoalSel').value = hGoal; $('hDirSel').value = hDir;
+  $('hUnitSel').value = hUnit; $('hGoalPSel').value = hGoalP;
+  $('hGoalSel').hidden = hByPage(); $('hGoalPSel').hidden = !hByPage();
+  $('rModeSel').value = readMode; $('dwellSel').value = dwell; $('dwellSel').hidden = readMode !== 'timer';
   document.documentElement.style.setProperty('--qfs', fontSize + 'px');
 }
 let syncT = null;
@@ -2046,22 +2342,42 @@ function drawUpd(u) {
   $('updCheck').disabled = ['checking', 'downloading', 'dev'].includes(u.status);
 }
 function settingsScreen() {
+  syncControls();
   $('mStyle').value = mStyle;
-  $('dwellSel').value = dwell;
   $('themeSel').value = theme;
+  drawRemList();
+  setHints();
   if (DESK) { $('setVer').textContent = `الإصدار ${DESK.version}`; drawUpd(DESK.getUpdate()); }
   else {
     $('setVer').textContent = 'نسخة المتصفح';
     $('updState').textContent = 'التحديثات التلقائية في تطبيق سطح المكتب.';
     $('updCheck').disabled = true;
-    $('remCard').querySelectorAll('input').forEach(i => { i.disabled = true; });
+    $('remCard').querySelectorAll('input,select,button').forEach(i => { i.disabled = true; });
+    $('remAdd').disabled = true;
   }
+}
+// شروح تحت كل إعداد بحسب القيمة المختارة
+function setHints() {
+  $('wirdHint').textContent = `تختم به القرآن كل ${ayyamN(Math.ceil(PAGES_N / wird))} تقريبًا`;
+  $('rModeHint').textContent = readMode === 'timer'
+    ? 'تُحسب صفحة الورد مقروءة إذا بقيت مفتوحة هذه المدة'
+    : 'يظهر تحت كل صفحة من صفحات الورد زر «قرأتُ هذه الصفحة» تضغطه حين تُتمّها';
+  $('hGoalHint').textContent = hByPage()
+    ? 'تُقسَّم الصفحة على آياتها بأطوالها، ويقف ورد اليوم عند أقرب نهاية آية للمقدار'
+    : 'عدد الآيات الجديدة التي تحفظها كل يوم';
+  let n = 0; const by = {};
+  for (let i = 0; i < TOTAL; i++) if ((state[i] & 1) && ivl[i]) { n++; by[ivl[i]] = (by[ivl[i]] || 0) + 1; }
+  $('ivlInfo').textContent = n ? `مواعيد خاصة: ${Object.entries(by).map(([k, c]) => `${ayat(c)} ${cycleName(RCYC[k])}`).join('، ')}` : '';
 }
 $('mStyle').onchange = e => {
   mStyle = e.target.value;
   try { localStorage.setItem(KEY + '.mstyle', mStyle); } catch (err) {} deskSave();
 };
 $('dwellSel').onchange = e => { dwell = +e.target.value; save(); if (screen === 'reader') startReadTimer(); };
+$('rModeSel').onchange = e => { readMode = e.target.value; save(); syncControls(); setHints(); };
+$('hUnitSel').onchange = e => { hUnit = e.target.value; save(); syncControls(); setHints(); refreshAll(); };
+$('hGoalPSel').onchange = e => { hGoalP = +e.target.value; save(); refreshAll(); };
+['wirdSel', 'cycle'].forEach(id => $(id).addEventListener('change', () => setHints()));
 $('themeSel').onchange = e => {
   theme = e.target.value;
   try { localStorage.setItem(KEY + '.theme', theme); } catch (err) {} deskSave();

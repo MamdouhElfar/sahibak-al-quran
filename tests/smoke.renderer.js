@@ -20,12 +20,13 @@
 
     // التفسير
     openTafsir(start[2] + 1); await wait(1500);
-    checks['التفسير الميسر يظهر'] = $('tfBody').textContent.length > 40 && !$('tfPanel').hidden;
+    checks['التفسير الميسر يظهر'] = $('tfBody').textContent.length > 40 && tfIsOpen();
+    checks['نص التفسير قابل للتحديد'] = getComputedStyle($('tfBody')).userSelect === 'text' && getComputedStyle(document.body).userSelect === 'none';
     closeTafsir();
 
     // موضع الورد لا يتحرك بالتصفّح
     lastPage = 425; openReader(300); await wait(800);
-    checks['التصفّح لا يحرّك موضع الورد'] = lastPage === 425 && $('readSt').textContent.includes('تصفّح حر');
+    checks['التصفّح لا يحرّك موضع الورد'] = lastPage === 425 && readCtlText().includes('تصفّح حر');
 
     // المرجعيات
     const c = addCat('اختبار'); toggleRef(start[2], c); showScreen('refs'); await wait(200);
@@ -58,7 +59,44 @@
     // مدة احتساب الصفحة من الإعدادات
     showScreen('settings'); $('dwellSel').value = '5'; $('dwellSel').dispatchEvent(new Event('change'));
     lastPage = 200; openReader(200); await wait(400);
-    checks['مدة احتساب الصفحة تتبع الإعدادات'] = dwell === 5 && readLeft <= 5 && $('readSt').textContent.includes('ث');
+    checks['مدة احتساب الصفحة تتبع الإعدادات'] = dwell === 5 && readLeft <= 5 && readCtlText().includes('ث');
+
+    // الاحتساب اليدوي: زر «قرأتُ هذه الصفحة» تحت صفحة الورد
+    $('rModeSel').value = 'manual'; $('rModeSel').dispatchEvent(new Event('change'));
+    lastPage = 201; openReader(201); await wait(500);
+    const rb = document.querySelector('[data-rd="read"][data-p="201"]');
+    checks['الاحتساب اليدوي يظهر زرًا تحت الصفحة'] = !!rb && !readTimer;
+    rb && rb.click(); await wait(100);
+    checks['زر «قرأتُها» يسجّل الصفحة ويقدّم الموضع'] = readOn(today()).includes(201) && lastPage === 202;
+    $('rModeSel').value = 'timer'; $('rModeSel').dispatchEvent(new Event('change'));
+
+    // انتهاء الورد عند نهاية سورة في وسط صفحة (سبأ ثم فاطر في ص ٤٣٤)
+    lastPage = 434; lastAyah = -1; openReader(434); await wait(900);
+    const sb = document.querySelector(`[data-rd="stop"][data-i="${start[35]}"]`);
+    sb && sb.click(); await wait(200);
+    checks['إنهاء الورد عند نهاية سورة'] = !!sb && lastPage === 434 && lastAyah === start[35] && $('wirdChip').textContent.includes('فاطر') && stoppedToday() && !readTimer;
+    lastAyah = -1;
+
+    // الحفظ بالصفحات: نصف صفحة
+    hUnit = 'p'; hGoalP = 1; const por = hifzPortion(), sh = pagesOf(por);
+    checks['ورد الحفظ بنصف صفحة'] = por.length > 0 && sh > 0.3 && sh < 0.75;
+    hUnit = 'a';
+
+    // موعد مراجعة خاص
+    const mem = state.findIndex(x => x & 1); applyIvl([mem], 6);
+    checks['موعد مراجعة خاص للمحفوظ'] = cyc(mem) === 90 && cyc(mem + 5000) === cycle;
+    applyIvl([mem], 0);
+
+    // المنبهات: تحويل الصيغة القديمة، وإضافة منبّه
+    const old = cleanRemind({ read: { on: true, time: '07:30' }, hifz: { on: false, time: '06:00' }, rev: { on: false, time: '17:00' } });
+    checks['تحويل المنبهات القديمة إلى قائمة'] = Array.isArray(old) && old.length === 3 && old[0].kind === 'read' && old[0].time === '07:30' && old[0].on;
+    showScreen('settings'); const n0 = remind.length; $('remAdd').click(); await wait(50);
+    checks['إضافة منبّه من الإعدادات'] = remind.length === n0 + 1 && document.querySelectorAll('#remList .remi').length === n0 + 1;
+    remind.pop(); save();
+
+    // آخر ما زرت في المرجعيات
+    recent = [{ p: 300, t: Date.now() }]; rcSel = -1; showScreen('refs'); await wait(100);
+    checks['آخر ما زرت في المرجعيات'] = document.querySelectorAll('#riList .rvi').length === 1;
 
     // الحفظ في الملف
     applyAct([start[114]], 1); save(); await wait(900);
