@@ -7,7 +7,7 @@
 <link href="fonts/ui.css" rel="stylesheet">
 <style>
 :root{
-  --bg:#f7f4ec; --card:#fffdf8; --ink:#2b2a26; --muted:#7f796d; --line:#e8e2d4; --hover:#efe9db;
+  --bg:#f7f4ec; --card:#fffdf8; --ink:#2b2a26; --muted:#7f796d; --line:#e8e2d4; --hover:#efe9db; --found:#f2c230;
   --none:#ddd7c9; --hifz:#3b7dd8; --fahm:#2fa36b; --both:#d4a017; --accent:#1f5e4a;
   --tile:#ebe5d8; --th:#a9c8f2; --tf:#a8dcbf; --tb:#f1d67f; --tr:#f3aaa0; --red:#d4483a;
   /* ألوان الرسم الدائري (متحققة لعمى الألوان، بترتيب الحلقة) */
@@ -16,7 +16,7 @@
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#131518; --card:#1c1f23; --ink:#ece8de; --muted:#9a958b; --line:#2a2e34; --hover:#23272c;
+    --bg:#131518; --card:#1c1f23; --ink:#ece8de; --muted:#9a958b; --line:#2a2e34; --hover:#23272c; --found:#c9a227;
     --none:#2f343b; --hifz:#5b9bf0; --fahm:#43c486; --both:#f0bf3a; --accent:#6fd0a8;
     --tile:#22262b; --th:#274a78; --tf:#1f5a3c; --tb:#7a5e12; --tr:#7d3029; --red:#f07a6c;
     --c-both:#b38812; --c-fahm:#2a9d63; --c-hifz:#4a88e0; --c-due:#e0574a; --c-none:#2c3036;
@@ -24,7 +24,7 @@
   }
 }
 :root[data-theme="dark"]{
-  --bg:#131518; --card:#1c1f23; --ink:#ece8de; --muted:#9a958b; --line:#2a2e34; --hover:#23272c;
+  --bg:#131518; --card:#1c1f23; --ink:#ece8de; --muted:#9a958b; --line:#2a2e34; --hover:#23272c; --found:#c9a227;
   --none:#2f343b; --hifz:#5b9bf0; --fahm:#43c486; --both:#f0bf3a; --accent:#6fd0a8;
   --tile:#22262b; --th:#274a78; --tf:#1f5a3c; --tb:#7a5e12; --tr:#7d3029; --red:#f07a6c;
   --c-both:#b38812; --c-fahm:#2a9d63; --c-hifz:#4a88e0; --c-due:#e0574a; --c-none:#2c3036;
@@ -155,7 +155,7 @@ input[type=number]{width:70px}
 .more{font-size:13px;color:var(--muted)}
 
 /* ---------- المصحف ---------- */
-.rbar{max-width:980px;margin:auto;padding:14px 16px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center}
+.rbar{max-width:1240px;margin:auto;padding:14px 16px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center}
 .reader{max-width:720px;margin:auto;padding:12px 16px 30px;display:flex;align-items:stretch;gap:8px}
 .nav{flex:none;width:44px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;font-size:22px;cursor:pointer}
 .nav:hover:not(:disabled){border-color:var(--accent)}
@@ -186,12 +186,46 @@ input[type=number]{width:70px}
   to{transform:perspective(1400px) rotateY(0);transform-origin:left center;opacity:1}}
 @media (prefers-reduced-motion:reduce){.mpage.turn-next,.mpage.turn-prev{animation:none}}
 /* لوحة التفسير: تُثبَّت يسار الشاشة ويتسع الكتاب لما بقي */
-#tfPanel{position:fixed;top:14px;bottom:14px;left:14px;width:380px;z-index:7;background:var(--card);border:1px solid var(--line);
+#tfPanel,#tsPanel{position:fixed;top:14px;bottom:14px;left:14px;width:380px;z-index:7;background:var(--card);border:1px solid var(--line);
   border-radius:16px;box-shadow:0 10px 40px #0002;display:flex;flex-direction:column;overflow:hidden;
   transform:translateX(calc(-100% - 24px));opacity:0;visibility:hidden;
   transition:transform .32s cubic-bezier(.2,.8,.3,1),opacity .25s,visibility 0s .32s}
-#tfPanel.open{transform:none;opacity:1;visibility:visible;transition:transform .32s cubic-bezier(.2,.8,.3,1),opacity .2s,visibility 0s}
-@media (prefers-reduced-motion:reduce){#tfPanel,#tfPanel.open{transition:none}}
+#tfPanel.open,#tsPanel.open{transform:none;opacity:1;visibility:visible;transition:transform .32s cubic-bezier(.2,.8,.3,1),opacity .2s,visibility 0s}
+@media (prefers-reduced-motion:reduce){#tfPanel,#tfPanel.open,#tsPanel,#tsPanel.open{transition:none}}
+/* التسميع */
+.tsb{flex:1;overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:12px;font-size:14px}
+.tsrange{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center}
+.tsrange label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.tsrange select{max-width:170px}
+.tsrange input{width:64px}
+.tsmore{flex-basis:100%;font-size:12px}
+.tsopt{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+.tsstate{line-height:1.8;min-height:24px}
+.tsstate .prog{margin-top:6px}
+.tsstate .prog span{background:var(--accent);transition:width .2s}
+.terr{color:var(--red)}
+.tslive{display:flex;align-items:center;gap:8px}
+.tsdot{width:10px;height:10px;border-radius:50%;background:var(--red);animation:tsPulse 1.2s ease-in-out infinite;flex:none}
+@keyframes tsPulse{50%{opacity:.35}}
+.tslvl{flex:none;width:70px;height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin-inline-start:auto}
+.tslvl span{display:block;height:100%;width:0;background:var(--hifz);transition:width .08s}
+.tsh{font-size:12px;color:var(--muted);margin-bottom:2px}
+.tse{display:grid;grid-template-columns:1fr auto;width:100%;text-align:start;font:inherit;border:0;background:none;color:var(--ink);padding:6px 8px;border-radius:9px;cursor:pointer}
+.tse:hover{background:var(--hover)}
+.tse b{font-size:13px;color:var(--red)}
+.tse span{grid-column:1;font-size:13px}
+.tse q{font-family:"Amiri Quran",Amiri,serif;font-size:17px;quotes:none}
+.tse em{grid-column:2;grid-row:1 / 3;align-self:center;font-style:normal;font-size:12px;color:var(--muted)}
+.tsres{display:flex;flex-direction:column;gap:4px;margin-bottom:8px;font-size:13px}
+.tslast{font-size:12px}
+.tsnote{font-size:11.5px;line-height:1.7}
+/* الكلمات المخفية تظهر كلما سُمِّعت، والخطأ بالأحمر */
+#reader.tsm-hide .ml .w.tp:not(.rv):not(.bad){color:transparent!important;background:color-mix(in srgb,var(--muted) 13%,transparent);border-radius:.18em}
+#reader.tsm-hide .ay.tp:not(.rv){color:transparent!important;background:color-mix(in srgb,var(--muted) 13%,transparent)}
+.ml .w.tp.rv{animation:tsIn .35s ease-out}
+@keyframes tsIn{from{opacity:.2}}
+.ml .w.bad,.ay.bad{color:var(--red)!important;background:color-mix(in srgb,var(--red) 16%,transparent)!important;border-radius:.18em}
+.ml .w.sus{background:color-mix(in srgb,var(--found) 30%,transparent)!important;border-radius:.18em}
 /* نص التفسير والآية وحدهما قابلان للتحديد والنسخ */
 #tfPanel .tfa,#tfPanel .tfb{-webkit-user-select:text;user-select:text;cursor:text}
 #reader.tf-open .reader,#reader.tf-open .rbar,#reader.tf-open .rstat{margin-left:408px;margin-right:16px}
@@ -231,6 +265,17 @@ input[type=number]{width:70px}
 .ri2 span{grid-column:1;font-size:12px;color:var(--muted)}
 .ri2 em{grid-column:2;grid-row:1 / 3;align-self:center;font-style:normal;font-size:12px;color:var(--muted)}
 .pop .lnk{display:block;margin:6px auto 4px;font-size:12px}
+#qSearch{width:180px;transition:width .2s;font:inherit;font-size:13px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--ink);padding:7px 10px}
+#qSearch:focus{width:250px;outline:2px solid color-mix(in srgb,var(--accent) 40%,transparent);outline-offset:0}
+.spop{width:min(520px,80vw);right:0;left:auto;padding:6px 4px}
+.slist{max-height:min(60vh,520px);overflow:auto}
+.sri{display:block;width:100%;text-align:start;font:inherit;border:0;background:none;color:var(--ink);padding:7px 10px;border-radius:9px;cursor:pointer}
+.sri:hover,.sri.on{background:var(--hover)}
+.srl{display:block;font-size:12px;color:var(--muted)}
+.srt{display:block;font-family:"Amiri Quran",Amiri,serif;font-size:18px;line-height:2}
+.srt mark{background:color-mix(in srgb,var(--found) 45%,transparent);color:inherit;border-radius:4px;padding:0 2px}
+.ml .w.found,.ay.found{background:color-mix(in srgb,var(--found) 42%,transparent)!important;animation:foundIn 1.6s ease-out}
+@keyframes foundIn{0%,40%{box-shadow:0 0 0 .25em color-mix(in srgb,var(--found) 55%,transparent)}100%{box-shadow:0 0 0 0 transparent}}
 /* أزرار احتساب القراءة تحت كل صفحة */
 .rcell{display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;min-width:0}
 .rcell .ok{color:var(--accent);font-weight:700}
@@ -513,13 +558,13 @@ body.bulk-on{padding-bottom:130px}
       <div class="ph"><b>🧠 الحفظ الجديد</b><span class="pv"></span></div>
       <div class="prog"><span style="background:var(--hifz)"></span></div>
       <div class="pd"></div>
-      <div class="row"><button class="btn" id="hHifzOpen">افتح في المصحف</button><button class="btn pri" id="hHifzDone">حفظتُها ✓</button></div>
+      <div class="row"><button class="btn" id="hHifzOpen">افتح في المصحف</button><button class="btn" id="hHifzTs" title="سمّع ورد الحفظ بصوتك">🎙️ سمّعها</button><button class="btn pri" id="hHifzDone">حفظتُها ✓</button></div>
     </div>
     <div class="prow2" id="planRev">
       <div class="ph"><b>🔁 المراجعة</b><span class="pv"></span></div>
       <div class="prog"><span style="background:var(--both)"></span></div>
       <div class="pd"></div>
-      <div class="row"><button class="btn" id="hRevOpen">افتح في المصحف</button><button class="btn pri" id="hRevDone">راجعتُها ✓</button></div>
+      <div class="row"><button class="btn" id="hRevOpen">افتح في المصحف</button><button class="btn" id="hRevTs" title="سمّع ورد المراجعة بصوتك">🎙️ سمّعها</button><button class="btn pri" id="hRevDone">راجعتُها ✓</button></div>
     </div>
   </div>
 
@@ -554,11 +599,12 @@ body.bulk-on{padding-bottom:130px}
     <select id="rSura" aria-label="انتقل إلى سورة"></select>
     <select id="rJuz" aria-label="انتقل إلى جزء"></select>
     <span class="row muted" style="font-size:13px">صفحة <input type="number" id="rPage" min="1" max="604"></span>
-    <button class="btn" id="fsDown" title="تصغير الخط">أ −</button>
-    <button class="btn" id="fsUp" title="تكبير الخط">أ +</button>
+    <span class="rpopw"><input type="search" id="qSearch" placeholder="🔍 ابحث في المصحف…" title="ابحث في المصحف بكلمة أو أكثر (Ctrl+F)" aria-label="البحث في المصحف" autocomplete="off">
+      <div class="pop spop" id="searchPop" hidden></div></span>
     <button class="btn wchip" id="wirdChip" title="العودة إلى موضع ورد القراءة"></button>
     <span class="rpopw"><button class="btn" id="recentBtn" title="آخر ثلاثة مواضع قرأتها خارج الورد">🕘 آخر ما قرأت</button>
       <div class="pop" id="recentPop" hidden></div></span>
+    <button class="btn" id="tsBtn" title="سمّع من حفظك بصوتك، فيتابعك التطبيق كلمة كلمة وينبّهك على الأخطاء">🎙️ تسميع</button>
     <button class="btn" id="pOpen" title="آيات الصفحة وحالاتها لتسجيل الحفظ والمراجعة وقراءة التفسير">📋 تفاصيل الصفحة</button>
   </div>
   <div class="reader">
@@ -572,6 +618,27 @@ body.bulk-on{padding-bottom:130px}
     <button class="nav" id="pgNext" title="الصفحة التالية">‹</button>
   </div>
   <div class="rstat" id="rstat"></div>
+  <aside id="tsPanel" class="sidep" aria-label="التسميع" aria-hidden="true">
+    <div class="tfh">
+      <h2>🎙️ التسميع</h2>
+      <button class="ib" id="tsClose" title="إغلاق (Esc)">✕</button>
+    </div>
+    <div class="tsb">
+      <div class="tsrange" id="tsRange">
+        <label>السورة <select id="tsSura" aria-label="السورة"></select></label>
+        <label>من الآية <input type="number" id="tsFrom" min="1"></label>
+        <label>إلى <input type="number" id="tsTo" min="1"></label>
+        <div class="muted tsmore" id="tsMore"></div>
+      </div>
+      <label class="tsopt"><input type="checkbox" class="tog" id="tsHide" checked> أخفِ الآيات، وتظهر كلما سمّعتَها</label>
+      <div class="tsstate" id="tsState"></div>
+      <div class="row tsctl"><button class="btn pri" id="tsGo">🎙️ ابدأ التسميع</button><button class="btn" id="tsHint" hidden title="أظهر الكلمة التالية إن نسيتَها">💡 الكلمة التالية</button></div>
+      <div id="tsSum"></div>
+      <div id="tsList"></div>
+      <div class="muted tslast" id="tsLast"></div>
+    </div>
+    <div class="tff muted tsnote">يتابع الحفظ كلمة كلمة: الكلمة المختلفة والناقصة والزائدة والمقطع المتجاوَز، ولا يحكم على التجويد ومخارج الحروف. يعمل على جهازك ولا يُرسل صوتك. محرّك Tilawa، إصدار تجريبي قد يخطئ أحيانًا.</div>
+  </aside>
   <aside id="tfPanel" aria-label="تفسير الآية" aria-hidden="true">
     <div class="tfh">
       <h2 id="tfRef"></h2>
@@ -614,7 +681,7 @@ body.bulk-on{padding-bottom:130px}
   <div class="card wcard">
     <h3>🧠 ورد الحفظ</h3>
     <div id="wHifz"></div>
-    <div class="wact row"><button class="btn" id="wHifzOpen">افتح في المصحف</button><button class="btn pri" id="wHifzDone">حفظتُها ✓</button></div>
+    <div class="wact row"><button class="btn" id="wHifzOpen">افتح في المصحف</button><button class="btn" id="wHifzTs" title="سمّع ورد الحفظ بصوتك">🎙️ سمّعها</button><button class="btn pri" id="wHifzDone">حفظتُها ✓</button></div>
     <details class="mlog">
       <summary>＋ سجّل حفظًا آخر</summary>
       <div class="row">سورة <select id="hlSura" aria-label="السورة"></select>
@@ -627,7 +694,7 @@ body.bulk-on{padding-bottom:130px}
   <div class="card wcard">
     <h3>🔁 ورد المراجعة</h3>
     <div id="wRev"></div>
-    <div class="wact row"><button class="btn" id="wRevOpen">افتح في المصحف</button><button class="btn pri" id="wRevDone">راجعتُها ✓</button></div>
+    <div class="wact row"><button class="btn" id="wRevOpen">افتح في المصحف</button><button class="btn" id="wRevTs" title="سمّع ورد المراجعة بصوتك">🎙️ سمّعها</button><button class="btn pri" id="wRevDone">راجعتُها ✓</button></div>
     <details class="mlog">
       <summary>＋ سجّل مراجعة</summary>
       <div class="row">سورة <select id="rlSura" aria-label="السورة"><option value="">اختر…</option></select> أو
@@ -795,10 +862,20 @@ body.bulk-on{padding-bottom:130px}
 
   <div class="card scard" id="sMushaf">
     <h3>📖 المصحف والمظهر</h3>
-    <div class="srow"><span class="sl"><b>شكل المصحف</b><span>حجم الصفحة من زرّي «أ −» و«أ +» فوق المصحف</span></span>
+    <div class="srow"><span class="sl"><b>شكل المصحف</b></span>
       <select id="mStyle">
         <option value="m1441">مصحف المدينة، طبعة ١٤٤١ (مطابق للمطبوع)</option>
         <option value="plain">نص متصل بخط أميري</option>
+      </select></div>
+    <div class="srow"><span class="sl"><b>حجم المصحف</b><span>«ملء الشاشة» تملأ فيه الصفحةُ ارتفاعَ النافذة وتتغيّر معها</span></span>
+      <select id="zoomSel">
+        <option value="70">أصغر كثيرًا (٧٠٪)</option>
+        <option value="80">أصغر (٨٠٪)</option>
+        <option value="90">أصغر قليلًا (٩٠٪)</option>
+        <option value="100">ملء الشاشة</option>
+        <option value="110">أكبر قليلًا (١١٠٪)</option>
+        <option value="125">أكبر (١٢٥٪)</option>
+        <option value="150">أكبر كثيرًا (١٥٠٪)</option>
       </select></div>
     <div class="srow"><span class="sl"><b>المظهر</b></span>
       <select id="themeSel"><option value="auto">تلقائي (حسب ويندوز)</option><option value="light">فاتح</option><option value="dark">داكن</option></select></div>
@@ -820,6 +897,8 @@ body.bulk-on{padding-bottom:130px}
       <button class="btn" id="imp">استرجاع نسخة</button>
       <button class="btn" id="openBk" hidden>مجلد النسخ التلقائية</button></span></div>
     <input type="file" id="file" accept=".json" hidden>
+    <div class="srow" id="tsModelRow"><span class="sl"><b>نموذج التسميع</b><span id="tsModelInfo"></span></span>
+      <button class="btn" id="tsModelDel" hidden>احذفه من الجهاز</button></div>
   </div>
 
   <div class="card scard" id="sAbout">
@@ -827,6 +906,7 @@ body.bulk-on{padding-bottom:130px}
     <div class="about-name"><img src="electron/icon.png" alt="">صاحبُك القرآن</div>
     <div style="font-size:14px;line-height:1.9">سُمّي التطبيق من حديث بُريدة رضي الله عنه عن النبي ﷺ:</div>
     <blockquote class="hadith">«إنّ القرآنَ يلقى صاحبَه يومَ القيامة حين ينشقّ عنه قبرُه كالرجل الشاحب … فيقول: أنا صاحبُك القرآنُ الذي أظمأتُك في الهواجر، وأسهرتُ ليلك …»</blockquote>
+    <div class="muted" style="font-size:12px;line-height:1.9">التسميع بمحرّك <b>Tilawa</b> مفتوح المصدر (رخصة MIT)، ونموذجه مبني على muaalem-model (MIT) وبيانات Tarteel وQUD (CC-BY)، ونص المرجع من Tanzil.</div>
     <div class="muted" style="font-size:12px;line-height:1.9">رواه أحمد (٢٢٩٥٠) وابن أبي شيبة في المصنّف والدارمي. حسّن إسنادَه ابنُ حجر في المطالب العالية والبوصيري، وفي إسناده بشير بن المهاجر وقد تُكُلِّم فيه فضعّفه بعض المحقّقين. وأصله مختصرًا عند ابن ماجه (٣٧٨١): «يجيء القرآن يوم القيامة كالرجل الشاحب فيقول: أنا الذي أسهرتُ ليلك وأظمأتُ نهارك»، وحسّنه الألباني.</div>
     <div class="muted" id="appVer" style="font-size:13px;margin-top:6px"></div>
     <div class="muted" style="font-size:12px;line-height:1.9;margin-top:8px">نص المصحف وتخطيط صفحاته والتفاسير من Quran.com · خطوط صفحات المصحف من مجمع الملك فهد لطباعة المصحف الشريف · بيانات السور والأجزاء من Tanzil.net · خطوط الواجهة Amiri وTajawal وAref Ruqaa (OFL) · تقليب الصفحات StPageFlip (MIT)</div>
@@ -900,6 +980,7 @@ body.bulk-on{padding-bottom:130px}
 
 <script src="data.js"></script>
 <script src="quran-text.js"></script>
+<script src="quran-search.js"></script>
 <script src="mushaf-1441.js"></script>
 <!-- StPageFlip 2.0.7 (MIT، انظر vendor/page-flip.LICENSE): تقليب الصفحات؛ إن تعذّر تحميلها يعمل المصحف صفحةً صفحة -->
 <script src="vendor/page-flip.browser.js"></script>

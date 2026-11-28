@@ -1,13 +1,14 @@
 {
   "name": "sahibak-al-quran",
   "productName": "صاحبُك القرآن",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "description": "صاحبُك القرآن: تتبّع حفظك وفهمك وقراءتك ومراجعتك للقرآن الكريم، مع مصحف المدينة (طبعة 1441) والتفسير",
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
     "web": "python -m http.server 8765",
     "icon": "electron tools/render-icon.js",
+    "build:tilawa": "node tools/build-tilawa.js",
     "smoke": "node tests/smoke.js",
     "dist": "node tests/smoke.js && electron-builder --win nsis --publish never",
     "release": "node tests/smoke.js && electron-builder --win nsis --publish always"
@@ -19,8 +20,11 @@
     "electron-updater": "^6.8.11"
   },
   "devDependencies": {
+    "@tilawa/core": "1.0.0-rc.1",
     "electron": "^33.2.1",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "esbuild": "0.28.2",
+    "onnxruntime-web": "1.31.1"
   },
   "build": {
     "appId": "com.elfar.sahibak",
@@ -35,6 +39,7 @@
       "app.js",
       "data.js",
       "quran-text.js",
+      "quran-search.js",
       "mushaf-1441.js",
       "tafsir-muyassar.js",
       "fonts/**/*",
@@ -45,8 +50,10 @@
     "asarUnpack": [
       "fonts/**",
       "quran-text.js",
+      "quran-search.js",
       "mushaf-1441.js",
-      "tafsir-muyassar.js"
+      "tafsir-muyassar.js",
+      "vendor/tilawa/**"
     ],
     "win": {
       "target": "nsis",

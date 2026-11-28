@@ -90,6 +90,16 @@ ipcMain.on('data:write', (e, json) => { writeData(json); });
 ipcMain.on('data:write-sync', (e, json) => { e.returnValue = writeData(json); });
 ipcMain.handle('data:open-backups', () => { fs.mkdirSync(BACKUP_DIR, { recursive: true }); return shell.openPath(BACKUP_DIR); });
 ipcMain.on('log:error', (e, msg) => logError('renderer', msg));
+
+// نموذج التسميع (Tilawa): يُنزَّل مرة واحدة عند أول تسميع ويُحفظ هنا، فيعمل التسميع بعدها دون إنترنت
+const TW_DIR = process.env.QURAN_TILAWA_DIR || path.join(USER_DIR, 'tilawa');
+const twFile = k => path.join(TW_DIR, String(k).replace(/[^\w.@-]+/g, '_'));
+ipcMain.handle('tw:get', (e, k) => { try { return fs.readFileSync(twFile(k)); } catch { return null; } });
+ipcMain.handle('tw:put', (e, k, bytes) => { fs.mkdirSync(TW_DIR, { recursive: true }); fs.writeFileSync(twFile(k), Buffer.from(bytes)); });
+ipcMain.handle('tw:delete', (e, k) => { try { fs.unlinkSync(twFile(k)); } catch { /* غير موجود */ } });
+ipcMain.handle('tw:keys', () => { try { return fs.readdirSync(TW_DIR); } catch { return []; } });
+ipcMain.handle('tw:size', () => { try { return fs.readdirSync(TW_DIR).reduce((n, f) => n + fs.statSync(path.join(TW_DIR, f)).size, 0); } catch { return 0; } });
+ipcMain.handle('tw:clear', () => { fs.rmSync(TW_DIR, { recursive: true, force: true }); });
 ipcMain.on('app:version', e => { e.returnValue = app.getVersion(); });
 
 // ---------- التحديث التلقائي (في النسخة المثبّتة فقط) ----------

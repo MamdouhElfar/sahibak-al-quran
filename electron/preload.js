@@ -22,4 +22,13 @@ contextBridge.exposeInMainWorld('qmDesktop', {
   getUpdate: () => ipcRenderer.sendSync('update:get'),
   checkUpdate: () => ipcRenderer.invoke('update:check'),
   onUpdateStatus: cb => ipcRenderer.on('update-status', (e, s) => cb(s)),
+  // مخزن نموذج التسميع في مجلد البيانات
+  tilawa: {
+    get: k => ipcRenderer.invoke('tw:get', k).then(b => b ? new Uint8Array(b.buffer, b.byteOffset, b.byteLength) : null),
+    put: (k, bytes) => ipcRenderer.invoke('tw:put', k, bytes),
+    delete: k => ipcRenderer.invoke('tw:delete', k),
+    keys: () => ipcRenderer.invoke('tw:keys'),
+    size: () => ipcRenderer.invoke('tw:size'),
+    clear: () => ipcRenderer.invoke('tw:clear'),
+  },
 });

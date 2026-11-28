@@ -55,7 +55,7 @@ const tfd = new Int32Array(TOTAL);
 const TF_FADE = 365;
 const tfAge = i => (state[i] & 2) && tfd[i] ? today() - tfd[i] : 0;
 const tfFade = i => Math.min(1, tfAge(i) / TF_FADE);   // ٠ حديث … ١ مضت عليه سنة
-let cycle = 14, readLog = {}, wird = 5, lastPage = 1, khatmaStart = today(), fontSize = 26;
+let cycle = 14, readLog = {}, wird = 5, lastPage = 1, khatmaStart = today(), zoom = 100;
 let khatmaPre = 0;   // صفحات قُرئت من الختمة الحالية قبل بدء التتبّع (١ … khatmaPre)
 let dwell = 15;
 let backupDay = 0, backupSnooze = 0;   // يوم آخر نسخة احتياطية، ويوم تأجيل التذكير
@@ -82,6 +82,7 @@ let remind = [];
 
 // ---------- التحقق من صحة البيانات (للتحميل والاسترجاع) ----------
 const CYCLES = [3, 7, 14, 30, 60], WIRDS = [1, 2, 3, 4, 5, 10, 20, 40], HGOALS = [1, 2, 3, 5, 7, 10, 15, 20], HGOALPS = [1, 2, 3, 4, 6, 8];
+const ZOOMS = [70, 80, 90, 100, 110, 125, 150];   // حجم المصحف بالنسبة إلى ملء الشاشة
 const cleanDir = v => v === 'b' || v === 'f' ? v : null;
 const int = (v, min, max) => { const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v; return Number.isInteger(n) && n >= min && n <= max ? n : null; };
 const day = v => int(v, 1, today() + 1);          // +1: نسخة من جهاز في منطقة زمنية متقدّمة
@@ -191,7 +192,7 @@ function load() {
   lastPage = read('.last', str, v => int(v, 1, PAGES_N)) ?? 1;
   khatmaStart = read('.khatma', str, day) ?? today();
   khatmaPre = read('.kpre', str, v => int(v, 0, PAGES_N)) ?? 0;
-  fontSize = read('.fs', str, v => int(v, 18, 40)) ?? 26;
+  zoom = read('.zoom', str, oneOf(ZOOMS)) ?? 100;   // ١٠٠ = ملء الشاشة
   const day0 = v => int(v, 0, today() + 1);   // ٠ = لم يحدث بعد
   backupDay = read('.bk', str, day0) ?? 0;
   backupSnooze = read('.bkLater', str, day0) ?? 0;
@@ -233,7 +234,7 @@ function save() {
     localStorage.setItem(KEY + '.last', lastPage);
     localStorage.setItem(KEY + '.khatma', khatmaStart);
     localStorage.setItem(KEY + '.kpre', khatmaPre);
-    localStorage.setItem(KEY + '.fs', fontSize);
+    localStorage.setItem(KEY + '.zoom', zoom);
     localStorage.setItem(KEY + '.bk', backupDay);
     localStorage.setItem(KEY + '.bkLater', backupSnooze);
     localStorage.setItem(KEY + '.hlog', JSON.stringify(hifzLog));
@@ -613,14 +614,12 @@ $('rJuz').innerHTML = '<option value="">الجزء…</option>' + JUZ.map((_, k)
 $('rSura').onchange = e => { if (e.target.value) openReader(pageOf[start[+e.target.value]]); e.target.value = ''; };
 $('rJuz').onchange = e => { if (e.target.value) openReader(pageOf[juzB[+e.target.value - 1][0]]); e.target.value = ''; };
 $('rPage').onchange = e => openReader(Math.min(PAGES_N, Math.max(1, +e.target.value || 1)));
-document.documentElement.style.setProperty('--qfs', fontSize + 'px');
-const setFs = d => {
-  fontSize = Math.min(40, Math.max(18, fontSize + d));
-  document.documentElement.style.setProperty('--qfs', fontSize + 'px'); save();
+// حجم المصحف من الإعدادات: ١٠٠٪ تملأ الصفحةُ ارتفاعَ النافذة تمامًا وتتبع تغيّر مقاسها
+const applyZoom = () => {
+  document.documentElement.style.setProperty('--qfs', 26 * zoom / 100 + 'px');
   if (book) { sizeBook(); window.dispatchEvent(new Event('resize')); }
 };
-$('fsUp').onclick = () => setFs(2);
-$('fsDown').onclick = () => setFs(-2);
+document.documentElement.style.setProperty('--qfs', 26 * zoom / 100 + 'px');   // الكتاب لم يُنشأ بعد
 
 // ---------- رسم مصحف المدينة (طبعة 1441) سطرًا بسطر بخطوط مجمع الملك فهد (QPC V2) ----------
 // لكل صفحة خط خاص يُحمَّل من مجلد التطبيق عند فتحها؛ وإن تعذّر التحميل يُعرض النص العادي
@@ -646,12 +645,14 @@ function ayahCls(i, hifzSet) {
   return (isDue(i) ? ' due' : readerMode === 'hifz' && hifzSet.has(i) ? ' h1' : '') + pre;
 }
 function mushafHtml(p, hifzSet) {
+  const cnt = {};
   return M1441[p].map(r => {
     if (r[0] === 'h') return `<div class="ml mh"><span>سورة ${SURAS[r[1] - 1][0]}</span></div>`;
     if (r[0] === 'b') return `<div class="ml mb" style="font-family:qcf1">${BASM_GLYPHS.map(g => `<span>${g}</span>`).join('')}</div>`;
     return '<div class="ml">' + r.map(([i, w]) => {
       const c = ayahCls(i, hifzSet);
-      return w.split(' ').map(g => `<span class="w${c}" data-i="${i}">${g}</span>`).join('');
+      // data-k رقم الرسم داخل الآية (ومنه موضع الكلمة في البحث والتسميع)؛ الآية الأولى قد تبدأ في الصفحة السابقة
+      return w.split(' ').map(g => { cnt[i] ??= pageOf[i] < p ? wordOff(p, i) : 0; const k = cnt[i]++; return `<span class="w${c}${wordCls(i, k)}" data-i="${i}" data-k="${k}">${g}</span>`; }).join('');
     }).join('') + '</div>';
   }).join('');
 }
@@ -663,7 +664,7 @@ function plainHtml(f, t, hifzSet) {   // احتياطي: نص عادي إن لم
       html += `<div class="sura-h">سورة ${SURAS[s - 1][0]}</div>`;
       if (s !== 1 && s !== 9) html += `<span class="basm">${BASMALA}</span>`;
     }
-    html += `<span class="ay${ayahCls(i, hifzSet)}" data-i="${i}">${AYAT[i]}</span> <span class="anum">۝${ar(a)}</span> `;
+    html += `<span class="ay${ayahCls(i, hifzSet)}${sHit && sHit.i === i ? ' found' : ''}${ayCls(i)}" data-i="${i}">${AYAT[i]}</span> <span class="anum">۝${ar(a)}</span> `;
   }
   return html;
 }
@@ -790,9 +791,14 @@ function onFlip() {
   startReadTimer();
 }
 // عرض الكتاب بحيث تتسع الصفحة كاملةً لارتفاع النافذة (نسبة الصفحة ٥٢٠:٨٢٠)
+// الارتفاع المتاح = النافذة بعد شريط المصحف فوقه وسطر القراءة تحته؛ ثم يُضرب في حجم المصحف من الإعدادات
 function sizeBook() {
-  const h = Math.max(420, innerHeight - 200) * fontSize / 26;   // أ− وأ+ تصغّر الكتاب وتكبّره
-  $('book').style.maxWidth = $('rstat').style.maxWidth = Math.round(2 * h * 520 / 820) + 'px';   // أزرار القراءة تحت كل صفحة
+  const b = $('book'), bb = b.getBoundingClientRect(), rs = $('rstat');
+  const top = bb.top + (document.scrollingElement.scrollTop || 0);
+  const below = Math.max(0, rs.getBoundingClientRect().bottom - bb.bottom) + (parseFloat(getComputedStyle(rs).marginBottom) || 0) + 4;   // سطر القراءة تحت الكتاب
+  const avail = innerHeight - top - below;
+  const h = Math.max(380, avail) * zoom / 100;
+  b.style.maxWidth = $('rstat').style.maxWidth = Math.floor(2 * h * 520 / 820) + 'px';   // أزرار القراءة تحت كل صفحة
 }
 function initBook() {
   const host = $('book');
@@ -811,6 +817,13 @@ function initBook() {
   book.on('flip', onFlip);
   book.on('changeOrientation', () => { filled.clear(); onFlip(); });
   new ResizeObserver(() => fitBook()).observe(host);
+  // إن التفّ شريط المصحف أو سطر القراءة إلى سطر آخر تغيّر الارتفاع المتاح للكتاب
+  let barH = 0;
+  new ResizeObserver(() => {
+    const h = $('reader').querySelector('.rbar').offsetHeight + $('rstat').offsetHeight;
+    if (!bookOn || h === barH) return;
+    barH = h; setTimeout(() => { sizeBook(); window.dispatchEvent(new Event('resize')); });   // خارج دورة المراقِب
+  }).observe($('reader').querySelector('.rbar'));
 }
 function updateReaderBar() {
   const vis = visiblePages();
@@ -872,6 +885,106 @@ $('recentPop').addEventListener('click', e => {
 });
 document.addEventListener('mousedown', e => { if (!$('recentPop').hidden && !e.target.closest('#recentPop,#recentBtn')) $('recentPop').hidden = true; });
 $('wirdChip').onclick = () => openReader(lastPage);
+
+// ---------- البحث في المصحف بالكلمة ----------
+// يُبحث في الرسم الإملائي بلا تشكيل (AYAT_S)، فتجد «الصلاة» «ٱلصَّلَوٰةَ»، ويُعلَّم موضع الكلمة في صفحة المصحف.
+// كلمات AYAT_S بعدد كلمات الرسم العثماني، وفي خط المصحف لكل آية رسومٌ بعدد كلماتها وعلامة نهايتها
+const HAS_S = typeof AYAT_S !== 'undefined';
+const normAr = t => t.replace(/[ً-ْٰۖ-ۭـ]/g, '').replace(/[أإآٱ]/g, 'ا')
+  .replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/[^ء-ي\s]/g, '').replace(/\s+/g, ' ').trim();
+const SEARCH_MAX = 150;
+let sHit = null;            // {i: الآية، w: أرقام رسومها المطابقة} يُعلَّم في الصفحة حتى يُمسح البحث
+let ayatHay = null, glyphN = null, lastSearch = null, searchT = null;
+const uWords = i => AYAT[i].split(' ').filter(x => /[ء-يٱ]/.test(x));   // دون علامات الوقف المنفصلة
+function glyphCount(i) {    // عدد رسوم الآية في خط المصحف
+  if (!glyphN) {
+    glyphN = new Uint16Array(TOTAL);
+    if (HAS_M) for (let p = 1; p <= PAGES_N; p++) for (const r of M1441[p]) if (Array.isArray(r[0])) for (const [k, w] of r) glyphN[k] += w.split(' ').length;
+  }
+  return glyphN[i];
+}
+function wordOff(p, i) {    // رسوم الآية في الصفحات قبل p (إن امتدت الآية على صفحتين)
+  let n = 0;
+  for (let q = pageOf[i]; q < p; q++) for (const r of M1441[q]) if (Array.isArray(r[0])) for (const [k, w] of r) if (k === i) n += w.split(' ').length;
+  return n;
+}
+function searchQuran(q) {
+  q = normAr(q);
+  if (!HAS_S || q.replace(/\s/g, '').length < 2) return null;
+  ayatHay ||= AYAT_S.map(t => t.replace(/ /g, ' '));
+  const res = [];
+  for (let i = 0; i < TOTAL; i++) {
+    const h = ayatHay[i];
+    let at = h.indexOf(q);
+    if (at < 0) continue;
+    const w = new Set(), src = AYAT_S[i];
+    for (; at >= 0; at = h.indexOf(q, at + 1)) {
+      const a = src.slice(0, at).split(' ').length - 1, b = src.slice(0, at + q.length).split(' ').length - 1;
+      for (let k = a; k <= b; k++) w.add(k);
+    }
+    res.push({ i, w });
+  }
+  return { q, res };
+}
+// مقتطف من الآية بالرسم العثماني حول الكلمة المطابقة
+function searchSnippet({ i, w }) {
+  const uw = uWords(i), sw = AYAT_S[i].split(' '), words = uw.length === sw.length ? uw : sw;
+  const first = Math.min(...w), from = Math.max(0, first - 5), to = Math.min(words.length, first + 7);
+  return (from ? '… ' : '') + words.slice(from, to).map((x, k) => w.has(from + k) ? `<mark>${x}</mark>` : x).join(' ') + (to < words.length ? ' …' : '');
+}
+function drawSearch(more = false) {
+  const pop = $('searchPop'), r = lastSearch;
+  if (!r) { pop.hidden = true; return; }
+  if (!r.res.length) { pop.innerHTML = '<div class="ph2">لم تُوجد هذه الكلمة في المصحف. جرّب جزءًا منها أو كلمة أخرى.</div>'; pop.hidden = false; return; }
+  const suras = new Set(r.res.map(x => suraOf[x.i])).size, shown = more ? r.res : r.res.slice(0, SEARCH_MAX);
+  pop.innerHTML = `<div class="ph2">${ayat(r.res.length)} في ${plural(suras, 'سورة', 'سورتين', 'سور', 'سورة')}</div><div class="slist">` +
+    shown.map((x, k) => `<button class="sri${k ? '' : ' on'}" data-i="${x.i}"><span class="srl">${SURAS[suraOf[x.i] - 1][0]} ${ar(ayahOf(x.i))} · ص ${ar(pageOf[x.i])}</span><span class="srt">${searchSnippet(x)}</span></button>`).join('') +
+    (shown.length < r.res.length ? `<button class="lnk" data-more="1">عرض البقية (${ar(r.res.length - shown.length)})</button>` : '') + '</div>';
+  pop.hidden = false;
+}
+function openHit(i) {
+  const x = lastSearch && lastSearch.res.find(y => y.i === i); if (!x) return;
+  const n = glyphCount(i), aligned = n === AYAT_S[i].split(' ').length + 1;
+  sHit = { i, w: aligned ? x.w : new Set(Array.from({ length: n }, (_, k) => k)) };   // إن لم تتطابق الكلمات تُعلَّم الآية كلها
+  $('searchPop').hidden = true;
+  paintVer++;
+  openReader(pageOf[i]);
+  if (bookOn) repaintPages();
+}
+function clearHit() { if (!sHit) return; sHit = null; paintVer++; if (screen === 'reader') repaintPages(); }
+$('qSearch').addEventListener('input', e => {
+  clearTimeout(searchT);
+  searchT = setTimeout(() => {
+    const v = e.target.value;
+    if (!normAr(v)) { lastSearch = null; drawSearch(); clearHit(); return; }
+    lastSearch = searchQuran(v);
+    if (lastSearch) drawSearch(); else $('searchPop').hidden = true;
+  }, 180);
+});
+$('qSearch').addEventListener('focus', () => { if (lastSearch) drawSearch(); });
+$('qSearch').addEventListener('keydown', e => {
+  const items = [...$('searchPop').querySelectorAll('.sri')], at = items.findIndex(x => x.classList.contains('on'));
+  if (e.key === 'Escape') { $('searchPop').hidden = true; e.target.blur(); e.stopPropagation(); }
+  else if (e.key === 'Enter' && at >= 0 && !$('searchPop').hidden) openHit(+items[at].dataset.i);
+  else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && items.length) {
+    e.preventDefault();
+    const n = (at + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+    items.forEach((x, k) => x.classList.toggle('on', k === n));
+    items[n].scrollIntoView({ block: 'nearest' });
+  }
+});
+$('searchPop').addEventListener('click', e => {
+  if (e.target.closest('[data-more]')) { drawSearch(true); return; }
+  const b = e.target.closest('.sri'); if (b) openHit(+b.dataset.i);
+});
+document.addEventListener('mousedown', e => { if (!$('searchPop').hidden && !e.target.closest('#searchPop,#qSearch')) $('searchPop').hidden = true; });
+// Ctrl+F يفتح البحث من أي شاشة
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey && e.code === 'KeyF')) return;
+  e.preventDefault();
+  if (screen !== 'reader') openReader(page);
+  $('qSearch').focus(); $('qSearch').select();
+});
 
 // التبديل بين الكتاب والصفحة الواحدة
 function setBookMode(on) {
@@ -1734,7 +1847,12 @@ document.head.append(tfStyle);
 function openTafsir(i) {
   tfAyah = i;
   tfStyle.textContent = `.w[data-i="${i}"]{background:color-mix(in srgb,var(--both) 32%,transparent)!important}`;
-  if (!tfIsOpen()) {
+  if (!tfIsOpen() && tsIsOpen()) {   // لوحة التسميع في المكان نفسه: تُغلق وتحلّ محلها
+    if (tsActive()) tsStop(false);
+    tsClear();
+    $('tsPanel').classList.remove('open'); $('tsPanel').setAttribute('aria-hidden', 'true');
+    $('tfPanel').classList.add('open'); $('tfPanel').setAttribute('aria-hidden', 'false');
+  } else if (!tfIsOpen()) {
     $('tfPanel').classList.add('open');           // تنزلق اللوحة من اليسار
     $('tfPanel').setAttribute('aria-hidden', 'false');
     slideReader(() => { $('reader').classList.add('tf-open'); relayoutReader(); });   // ليُعاد حساب مقاس الكتاب بجوار اللوحة
@@ -1915,6 +2033,346 @@ bindRefChips($('tfRefs'), () => tfAyah, focusNew => {
   if (focusNew) $('tfRefs').querySelector('.rnew input').focus();
 });
 
+
+// ======================================================================
+//  التسميع بالصوت (محرّك Tilawa: يعمل على الجهاز ولا يُرسل الصوت)
+// ======================================================================
+// تقرأ من حفظك فيتابعك المحرّك كلمة كلمة في المقطع المحدَّد، فتظهر الكلمات المخفية كلما سمّعتها،
+// ويُعلَّم ما أخطأتَ فيه (كلمة مختلفة، ناقصة، زائدة، أو مقطع تجاوزته). لا يحكم على التجويد ومخارج الحروف.
+// النموذج (نحو ٦٨ م.ب) يُنزَّل مرة واحدة عند أول تسميع ويُحفظ في مجلد البيانات، ثم يعمل دون إنترنت
+const TS_MB = 68;
+const TS_ERR = {
+  wrong_word: ['قرأتَ كلمة غير', 'كلمة مختلفة'],
+  omitted_word: ['نقصت كلمة', 'كلمة ناقصة'],
+  added_word: ['زدتَ كلمة عند', 'كلمة زائدة'],
+  skipped_passage: ['تجاوزتَ مقطعًا يبدأ من', 'مقطع متجاوَز'],
+};
+let tsLib = null, tsEngine = null, tsRef = null, tsLoading = null;
+let tsSegs = [], tsSeg = 0, tsSession = null, tsMic = null, tsBusy = false;
+// حالة المقطع الجاري: الآيات المطلوبة، وما ظهر من كل آية، والأخطاء
+let ts = null;   // {ids: Set, order: [], rv: Map(i ← آخر رسم ظاهر)، bad: Map(i ← Set k)، sus: Map، errs: Map(id ← خطأ)، reached: -1}
+let tsLog = [];
+try { tsLog = (JSON.parse(localStorage.getItem(KEY + '.tsm')) || []).filter(x => x && x.t).slice(0, 30); } catch (e) {}
+const saveTsLog = () => { try { localStorage.setItem(KEY + '.tsm', JSON.stringify(tsLog)); } catch (e) {} deskSave(); };
+const tsIsOpen = () => $('tsPanel').classList.contains('open');
+const tsActive = () => !!tsSession;
+const ayahIdx = (s, a) => start[s] + a - 1;
+const tsHide = () => $('tsHide').checked;
+
+// الكلمة n (من ١) في مرجع المحرّك ← رقم رسمها في خط المصحف
+function tsGlyph(i, n) {
+  const g = glyphCount(i), w = tsRef ? tsRef.ayahs[i].w.length : g - 1;
+  if (g === w + 1) return n - 1;
+  return Math.min(g - 2, Math.round((n - 1) * (g - 1) / w));
+}
+const tsWord = (i, n) => tsRef ? tsRef.ayahs[i].w[n - 1] || '' : '';
+
+// صنف الكلمة في رسم الصفحة (للبحث والتسميع)
+function wordCls(i, k) {
+  let c = '';
+  if (sHit && sHit.i === i && sHit.w.has(k)) c += ' found';
+  if (ts && ts.ids.has(i)) {
+    c += ' tp';
+    if ((ts.rv.get(i) ?? -1) >= k) c += ' rv';
+    if (ts.bad.get(i)?.has(k)) c += ' bad'; else if (ts.sus.get(i)?.has(k)) c += ' sus';
+  }
+  return c;
+}
+function ayCls(i) {
+  if (!ts || !ts.ids.has(i)) return '';
+  return ' tp' + (ts.rv.has(i) ? ' rv' : '') + (ts.bad.get(i)?.size ? ' bad' : '');
+}
+const tsSpans = (i, k) => document.querySelectorAll(k === undefined ? `#book [data-i="${i}"], #mtext [data-i="${i}"]` : `#book .w[data-i="${i}"][data-k="${k}"], #mtext .w[data-i="${i}"][data-k="${k}"]`);
+function tsPaint(i) {   // يُحدِّث كلمات آية واحدة دون إعادة رسم الصفحة
+  tsSpans(i).forEach(el => {
+    const k = el.classList.contains('w') ? +el.dataset.k : null;
+    el.classList.remove('rv', 'bad', 'sus', 'tp');
+    (k === null ? ayCls(i) : wordCls(i, k)).trim().split(/\s+/).filter(Boolean).forEach(c => el.classList.add(c));
+  });
+}
+
+// ---------- المقطع ----------
+// مقاطع متصلة داخل سورة واحدة (المحرّك يتابع مقطعًا من سورة واحدة في كل مرة)
+function segsOf(ids) {
+  const out = [];
+  [...new Set(ids)].sort((a, b) => a - b).forEach(i => {
+    const s = suraOf[i], a = ayahOf(i), l = out[out.length - 1];
+    if (l && l.s === s && l.to === a - 1) l.to = a; else out.push({ s, from: a, to: a });
+  });
+  return out;
+}
+const segIds = g => Array.from({ length: g.to - g.from + 1 }, (_, k) => ayahIdx(g.s, g.from + k));
+const segTxt = g => `${SURAS[g.s - 1][0]} ${g.from === g.to ? ar(g.from) : `${ar(g.from)}–${ar(g.to)}`}`;
+// المقطع الافتراضي: ورد اليوم في جلسة الحفظ أو المراجعة، وإلا آيات الصفحة الظاهرة
+function defaultSegs() {
+  if (readerMode === 'hifz' && hifzToday.length) return segsOf(hifzToday);
+  if (readerMode === 'rev' && revToday.length) {
+    const ids = [];
+    revToday.forEach(p => { for (let i = pageB[p - 1][0]; i <= pageB[p - 1][1]; i++) if (state[i] & 1) ids.push(i); });
+    if (ids.length) return segsOf(ids);
+  }
+  return segsOf(visibleAyat()).slice(0, 1);
+}
+function drawTsRange() {
+  const g = tsSegs[0];
+  $('tsSura').value = g.s;
+  $('tsFrom').max = $('tsTo').max = SURAS[g.s - 1][1];
+  $('tsFrom').value = g.from; $('tsTo').value = g.to;
+  $('tsMore').textContent = tsSegs.length > 1 ? `ثم: ${tsSegs.slice(1).map(segTxt).join('، ')}` : '';
+  $('tsRange').querySelectorAll('select,input').forEach(x => { x.disabled = tsActive() || tsBusy; });
+}
+function tsRangeChanged() {
+  const s = +$('tsSura').value, n = SURAS[s - 1][1];
+  let f = Math.min(n, Math.max(1, +$('tsFrom').value || 1)), t = Math.min(n, Math.max(1, +$('tsTo').value || f));
+  if (t < f) t = f;
+  tsSegs = [{ s, from: f, to: t }];
+  drawTsRange(); drawTsLast();
+}
+$('tsSura').innerHTML = SURAS.map((x, k) => `<option value="${k + 1}">${ar(k + 1)}. ${x[0]}</option>`).join('');
+$('tsSura').onchange = () => { $('tsFrom').value = 1; $('tsTo').value = SURAS[+$('tsSura').value - 1][1]; tsRangeChanged(); };
+$('tsFrom').onchange = $('tsTo').onchange = tsRangeChanged;
+
+// ---------- اللوحة ----------
+function openTasmee(segs) {
+  if (tsActive()) return;
+  if (screen !== 'reader') openReader(page);
+  tsSegs = segs && segs.length ? segs : defaultSegs();
+  if (tfIsOpen()) {   // اللوحتان في المكان نفسه
+    $('tfPanel').classList.remove('open'); $('tfPanel').setAttribute('aria-hidden', 'true');
+    tfStyle.textContent = ''; tfAyah = -1;
+  }
+  $('tsPanel').classList.add('open'); $('tsPanel').setAttribute('aria-hidden', 'false');
+  if (!$('reader').classList.contains('tf-open')) slideReader(() => { $('reader').classList.add('tf-open'); relayoutReader(); });
+  $('tsList').innerHTML = ''; $('tsSum').innerHTML = '';
+  drawTsRange(); drawTsLast(); tsStatus();
+}
+async function closeTasmee() {
+  if (tsActive()) await tsStop(false);
+  tsClear();
+  $('tsPanel').classList.remove('open'); $('tsPanel').setAttribute('aria-hidden', 'true');
+  if (!tfIsOpen()) slideReader(() => { $('reader').classList.remove('tf-open'); relayoutReader(); });
+}
+$('tsClose').onclick = () => closeTasmee();
+$('tsBtn').onclick = () => tsIsOpen() ? closeTasmee() : openTasmee();
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && tsIsOpen() && cur < 0 && $('ctx').hidden) closeTasmee(); });
+
+function drawTsLast() {
+  const x = tsLog[0];
+  $('tsLast').textContent = x ? `آخر تسميع ${agoTxt(x.t)}: ${x.r} · ${x.m ? `${plural(x.m, 'خطأ واحد', 'خطآن', 'أخطاء', 'خطأ')}` : 'بلا أخطاء ✓'}` : '';
+}
+async function tsStatus(msg) {
+  const el = $('tsState');
+  if (msg !== undefined) { el.innerHTML = msg; return; }
+  if (tsActive()) return;
+  const have = tsEngine || (DESK && DESK.tilawa ? (await DESK.tilawa.size()) > 30e6 : false);
+  $('tsGo').textContent = have ? '🎙️ ابدأ التسميع' : `🎙️ نزّل نموذج التسميع (${ar(TS_MB)} م.ب) وابدأ`;
+  el.innerHTML = have ? '<span class="muted">اقرأ من حفظك بصوت واضح، وسيتابعك التطبيق كلمة كلمة.</span>'
+    : `<span class="muted">يحتاج التسميع إلى نموذج للتعرّف على التلاوة يُنزَّل مرة واحدة (${ar(TS_MB)} م.ب)، ثم يعمل على جهازك دون إنترنت ودون إرسال صوتك.</span>`;
+}
+
+// ---------- المحرّك ----------
+function loadTilawa() {
+  return tsLoading ||= (async () => {
+    tsLib ||= await import('./vendor/tilawa/tilawa.mjs');
+    tsRef ||= await (await fetch('vendor/tilawa/ref-v2.json')).json();
+    tsEngine = await tsLib.createTilawa({
+      reference: tsRef, tier: 'full', providers: ['wasm'],
+      storage: DESK && DESK.tilawa ? DESK.tilawa : undefined,
+      wasmPaths: new URL('vendor/tilawa/ort/', location.href).href,
+      onProgress: p => {
+        if (p.stage === 'model' && !p.fromCache) tsStatus(`<div class="muted">جارٍ تنزيل نموذج التسميع… ${pct(Math.round((p.fraction || 0) * 100), 100)}</div><div class="prog"><span style="width:${Math.round((p.fraction || 0) * 100)}%"></span></div>`);
+        else if (p.stage === 'warmup') tsStatus('<span class="muted">جارٍ تجهيز التسميع…</span>');
+      },
+    });
+    return tsEngine;
+  })().catch(e => { tsLoading = null; throw e; });
+}
+
+// ---------- الجلسة ----------
+function tsBegin(g) {
+  const ids = segIds(g);
+  ts = { ids: new Set(ids), order: ids, rv: new Map(), bad: new Map(), sus: new Map(), errs: new Map(), reached: -1, seg: g };
+  $('reader').classList.toggle('tsm-hide', tsHide());
+  paintVer++; repaintPages();
+  if (!visiblePages().includes(pageOf[ids[0]])) openReader(pageOf[ids[0]], readerMode);
+}
+function tsClear() {
+  ts = null; tsAll = null;
+  $('reader').classList.remove('tsm-hide');
+  paintVer++; if (screen === 'reader') repaintPages();
+}
+let tsAll = null;   // نتيجة الجلسة كلها عبر المقاطع: {done: Set، bad: Set، errs: []}
+$('tsGo').onclick = () => tsActive() ? tsStop(true) : tsStart();
+async function tsStart() {
+  if (tsBusy) return;
+  tsBusy = true; drawTsRange();
+  $('tsGo').disabled = true; $('tsList').innerHTML = ''; $('tsSum').innerHTML = '';
+  const mic = tsLib && tsLib.prepareMicrophone ? (() => { try { return tsLib.prepareMicrophone(); } catch (e) { return null; } })() : null;
+  try {
+    await loadTilawa();
+    tsAll = { done: new Set(), bad: new Set(), errs: [] };
+    tsSeg = 0;
+    await tsRun(mic);
+  } catch (e) {
+    mic && mic.release();
+    tsSession = null; tsMic = null;
+    tsStatus(`<span class="terr">${tsErrText(e)}</span>`);
+    $('tsGo').textContent = '🎙️ أعد المحاولة';
+  } finally {
+    tsBusy = false; $('tsGo').disabled = false; drawTsRange();
+  }
+}
+function tsErrText(e) {
+  const code = e && e.reason;
+  if (code === 'denied') return 'لم يُسمح للتطبيق باستخدام الميكروفون. من إعدادات ويندوز: الخصوصية والأمان ← الميكروفون، فعّل «السماح لتطبيقات سطح المكتب بالوصول إلى الميكروفون».';
+  if (code === 'unavailable') return 'لم يُعثر على ميكروفون. صِل ميكروفونًا ثم أعد المحاولة.';
+  if (!navigator.onLine && !tsEngine) return 'تعذّر تنزيل نموذج التسميع: لا اتصال بالإنترنت. يحتاج التنزيل الأول فقط إلى الإنترنت.';
+  return 'تعذّر بدء التسميع: ' + escHtml(String(e && e.message || e)).slice(0, 200);
+}
+async function tsRun(prepared) {
+  const g = tsSegs[tsSeg];
+  tsBegin(g);
+  tsSession = tsEngine.startMemorization({ surah: g.s, fromAyah: g.from, toAyah: g.to });
+  tsSession.subscribe(tsHandle);
+  $('tsGo').textContent = '⏹ أنهِ التسميع';
+  $('tsHint').hidden = false;
+  tsStatus(`<div class="tslive"><span class="tsdot"></span><span id="tsWhere">أسمعك… ابدأ من ${ayahRef(ayahIdx(g.s, g.from))}</span><span class="tslvl"><span id="tsLvl"></span></span></div>`);
+  tsMic = await tsEngine.listen(tsSession, { prepared: prepared || undefined, onLevel: db => { const el = $('tsLvl'); if (el) el.style.width = Math.max(0, Math.min(100, (db + 60) * 2)) + '%'; } });
+}
+// أحداث المحرّك (وتُستعمل في الاختبار مباشرة)
+function tsHandle(e) {
+  if (!ts) return;
+  if (e.type === 'position') {
+    const c = e.observed && e.observed[0];
+    if (!c || e.state !== 'locked') return;
+    const i = ayahIdx(c.word.surah, c.word.ayah);
+    if (!ts.ids.has(i)) return;
+    tsReveal(i, c.word.word);
+    const w = $('tsWhere'); if (w) w.textContent = `أسمعك… ${ayahRef(i)}`;
+  } else if (e.type === 'checker') {
+    const i = ayahIdx(e.location.surah, e.location.ayah);
+    if (!ts.ids.has(i)) return;
+    const k = tsGlyph(i, e.location.word);
+    const add = (m, v) => { if (!m.has(i)) m.set(i, new Set()); m.get(i).add(v); };
+    const del = m => { m.get(i)?.delete(k); };
+    if (e.state === 'suspected') add(ts.sus, k);
+    else if (e.state === 'confirmed') {
+      del(ts.sus); add(ts.bad, k);
+      ts.errs.set(e.id, { i, n: e.location.word, k, cls: e.errorClass });
+      if (e.errorClass === 'skipped_passage') tsReveal(i, e.location.word, true);
+    } else { del(ts.sus); if (ts.errs.has(e.id)) { del(ts.bad); ts.errs.delete(e.id); } }   // صحّحتَ أو لم يتأكد
+    tsPaint(i); drawTsErrs();
+  }
+}
+// إظهار ما سُمِّع حتى الكلمة n من الآية i (لا يرجع إلى الوراء)
+function tsReveal(i, n, force = false) {
+  const last = n >= (tsRef ? tsRef.ayahs[i].w.length : 1);
+  const pos = ts.order.indexOf(i), k = last ? glyphCount(i) - 1 : tsGlyph(i, n);   // آخر كلمة: ومعها علامة نهاية الآية
+  if (!force && pos < ts.reached) return;
+  for (let p = 0; p < pos; p++) { const j = ts.order[p]; if ((ts.rv.get(j) ?? -1) < glyphCount(j) - 1) { ts.rv.set(j, glyphCount(j) - 1); tsPaint(j); } }
+  if ((ts.rv.get(i) ?? -1) < k) { ts.rv.set(i, k); tsPaint(i); }
+  ts.reached = Math.max(ts.reached, pos);
+  if (!visiblePages().includes(pageOf[i]) || (k === glyphCount(i) - 1 && pos + 1 < ts.order.length && !visiblePages().includes(pageOf[ts.order[pos + 1]]))) {
+    const next = k === glyphCount(i) - 1 && pos + 1 < ts.order.length ? ts.order[pos + 1] : i;
+    if (!visiblePages().includes(pageOf[next])) openReader(pageOf[next], readerMode);   // يقلب الصفحة مع التلاوة
+  }
+  // آخر كلمة في المقطع: يُنهى بعد لحظة، ثم يبدأ المقطع التالي إن وُجد
+  if (pos === ts.order.length - 1 && last) { clearTimeout(tsReveal.t); tsReveal.t = setTimeout(() => tsSegEnd(), 1800); }
+}
+function drawTsErrs() {
+  const list = [...(tsAll ? tsAll.errs : []), ...(ts ? ts.errs.values() : [])];
+  $('tsList').innerHTML = list.length ? `<div class="tsh">${plural(list.length, 'خطأ واحد', 'خطآن', 'أخطاء', 'خطأ')}</div>` + list.map(x =>
+    `<button class="tse" data-i="${x.i}"><b>${TS_ERR[x.cls] ? TS_ERR[x.cls][1] : 'خطأ'}</b><span>${TS_ERR[x.cls] ? TS_ERR[x.cls][0] : ''} «<q>${escHtml(tsWord(x.i, x.n))}</q>»</span><em>${ayahRef(x.i)}</em></button>`).join('') : '';
+}
+$('tsList').addEventListener('click', e => { const b = e.target.closest('.tse'); if (b && !visiblePages().includes(pageOf[+b.dataset.i])) openReader(pageOf[+b.dataset.i], readerMode); });
+// تلميح: يُظهر الكلمة التالية إن نسيتَها
+$('tsHint').onclick = () => {
+  if (!ts) return;
+  for (const i of ts.order) {
+    const k = ts.rv.get(i) ?? -1;
+    if (k < glyphCount(i) - 1) { ts.rv.set(i, k + 1); tsPaint(i); ts.hints = (ts.hints || 0) + 1; return; }
+  }
+};
+// جمع نتيجة المقطع ثم الانتقال إلى التالي
+function tsCollect() {
+  if (!ts) return;
+  for (let p = 0; p <= ts.reached; p++) {
+    const i = ts.order[p];
+    if (p < ts.reached || (ts.rv.get(i) ?? -1) >= glyphCount(i) - 1) tsAll.done.add(i);
+  }
+  ts.errs.forEach(x => { tsAll.bad.add(x.i); tsAll.errs.push(x); });
+}
+async function tsSegEnd() {
+  if (!tsSession || tsBusy) return;
+  tsBusy = true;
+  try {
+    const m = tsMic; tsMic = null;
+    if (m) await m.stop();
+    tsSession = null;
+    tsCollect();
+    if (++tsSeg < tsSegs.length) { await tsRun(null); return; }
+    tsFinish();
+  } finally { tsBusy = false; drawTsRange(); }
+}
+async function tsStop(show) {
+  clearTimeout(tsReveal.t);
+  const m = tsMic; tsMic = null;
+  try { if (m) await m.stop(); } catch (e) {}
+  tsSession = null;
+  if (show) { tsCollect(); tsFinish(); } else tsAll = null;
+}
+// النتيجة: الآيات السليمة تُسجَّل مراجعةً (أو حفظًا جديدًا)، وما فيه خطأ يعود للمراجعة غدًا
+let tsResult = null;
+function tsFinish() {
+  $('tsHint').hidden = true;
+  $('tsGo').textContent = '🎙️ سمّع مرة أخرى';
+  const done = [...tsAll.done], bad = done.filter(i => tsAll.bad.has(i)).concat([...tsAll.bad].filter(i => !tsAll.done.has(i)));
+  const clean = done.filter(i => !tsAll.bad.has(i));
+  const t = today();
+  tsResult = { review: clean.filter(i => (state[i] & 1) && rev[i] !== t), learn: clean.filter(i => !(state[i] & 1)), again: [...new Set(bad)].filter(i => state[i] & 1) };
+  const m = tsAll.errs.length;
+  if (done.length || m) {
+    tsLog.unshift({ t: Date.now(), r: tsSegs.map(segTxt).join('، '), n: done.length, m });
+    tsLog = tsLog.slice(0, 30); saveTsLog();
+  }
+  drawTsLast();
+  tsStatus(done.length ? `<b>${m ? `سمّعتَ ${ayat(done.length)}، ${plural(m, 'وفيها خطأ واحد', 'وفيها خطآن', 'وفيها أخطاء', 'وفيها خطأ')}` : `ما شاء الله، سمّعتَ ${ayat(done.length)} بلا أخطاء ✓`}</b>`
+    : '<span class="muted">لم يُسمع شيء من المقطع. تأكد من الميكروفون ثم أعد المحاولة.</span>');
+  const r = tsResult, lines = [];
+  if (r.review.length) lines.push(`🔁 مراجعة ${ayat(r.review.length)} محفوظة`);
+  if (r.learn.length) lines.push(`🧠 حفظ ${ayat(r.learn.length)} جديدة`);
+  if (r.again.length) lines.push(`↩️ ${ayat(r.again.length)} فيها خطأ تعود للمراجعة غدًا`);
+  $('tsSum').innerHTML = lines.length ? `<div class="tsres">${lines.map(x => `<div>${x}</div>`).join('')}</div><button class="btn pri" id="tsSave">سجّل نتيجة التسميع ✓</button>` : '';
+}
+$('tsSum').addEventListener('click', e => {
+  if (!e.target.closest('#tsSave') || !tsResult) return;
+  const r = tsResult, t = today(); tsResult = null;
+  if (r.review.length) applyReview(r.review);
+  if (r.learn.length) applyAct(r.learn, 1);
+  r.again.forEach(i => { rev[i] = Math.min(rev[i], t - cyc(i) + 1); });   // تستحق المراجعة غدًا
+  save(); refreshAll();
+  $('tsSum').innerHTML = '<div class="tsres">سُجِّلت النتيجة ✓</div>';
+});
+$('tsHide').onchange = () => { $('reader').classList.toggle('tsm-hide', tsHide() && !!ts); try { localStorage.setItem(KEY + '.tshide', tsHide() ? '1' : '0'); } catch (e) {} };
+try { $('tsHide').checked = localStorage.getItem(KEY + '.tshide') !== '0'; } catch (e) {}
+
+// مداخل التسميع: الشريط، والزر الأيمن على آية، وبطاقتا الحفظ والمراجعة
+$('hHifzTs').onclick = $('wHifzTs').onclick = () => { if (!hifzToday.length) return; openReader(pageOf[hifzToday[0]], 'hifz'); openTasmee(segsOf(hifzToday)); };
+$('hRevTs').onclick = $('wRevTs').onclick = () => { if (!revToday.length) return; openReader(revToday[0], 'rev'); openTasmee(); };
+
+// نموذج التسميع في الإعدادات
+async function drawTsModel() {
+  if (!DESK || !DESK.tilawa) { $('tsModelRow').hidden = true; return; }
+  const n = await DESK.tilawa.size();
+  $('tsModelInfo').textContent = n > 30e6 ? `مُنزَّل على جهازك (${ar(Math.round(n / 1e6))} م.ب)` : 'لم يُنزَّل بعد. يُنزَّل عند أول تسميع.';
+  $('tsModelDel').hidden = !(n > 30e6);
+}
+$('tsModelDel').onclick = async () => {
+  if (tsActive()) return;
+  if (tsEngine) { await tsEngine.dispose().catch(() => {}); tsEngine = null; tsLoading = null; }
+  await DESK.tilawa.clear(); drawTsModel();
+};
+
 // ---------- القائمة السريعة بالزر الأيمن على آية ----------
 let ctxI = -1;
 function openCtx(i, x, y) {
@@ -1929,6 +2387,7 @@ function openCtx(i, x, y) {
     (h ? `<button class="ci" data-act="rev"${rev[i] === t ? ' disabled' : ''}>🔁 ${rev[i] === t ? 'رُوجعت اليوم ✓' : 'راجعتُها اليوم'}</button>` : '') +
     `<button class="ci" data-act="fahm"><i class="sw" style="background:var(--fahm)"></i> ${f ? (tfAge(i) >= TF_FADE ? 'قرأتُ تفسيرها مجددًا' : 'إلغاء «قرأتُ التفسير»') : 'قرأتُ تفسيرها'}</button>` +
     (canEndAt(i) ? `<button class="ci" data-act="end">🏁 انتهى وردي عند هذه الآية</button>` : '') +
+    `<button class="ci" data-act="tsm"${tsActive() ? ' disabled' : ''}>🎙️ سمّع من هذه الآية</button>` +
     '<button class="ci" data-act="page">📋 تفاصيل الصفحة وآياتها</button>' +
     `<div class="csep">🔖 أضف إلى المرجعيات</div><div class="rchips">${refChips(i)}</div>`;
   m.hidden = false;
@@ -1967,6 +2426,11 @@ $('ctx').addEventListener('click', e => {
   else if (act === 'rev') { applyReview([i]); after(); }
   else if (act === 'fahm') { if ((state[i] & 2) && tfAge(i) >= TF_FADE) tfd[i] = today(); else applyAct([i], 2); after(); }
   else if (act === 'end') endWirdAt(i);
+  else if (act === 'tsm') {   // من الآية إلى آخر الصفحات الظاهرة في سورتها
+    const vis = visiblePages(), last = pageB[Math.max(...vis, pageOf[i]) - 1][1];
+    let to = i; while (to < last && suraOf[to + 1] === suraOf[i]) to++;
+    openTasmee([{ s: suraOf[i], from: ayahOf(i), to: ayahOf(to) }]);
+  }
   else if (act === 'page') openGroup('pages', pageOf[i] - 1);
 });
 // نص الآية للنسخ: بالرسم العثماني وتشكيله كما هو، بين القوسين المزخرفين، ثم اسم السورة ورقم الآية
@@ -2222,7 +2686,7 @@ function showScreen(s) {
   if (s !== 'mapScreen') setPicking(false);
   tip.style.display = 'none';
   if (s === 'reader') renderPage();
-  else { clearInterval(readTimer); readTimer = null; }
+  else { clearInterval(readTimer); readTimer = null; if (typeof tsIsOpen === 'function' && tsIsOpen()) closeTasmee(); }
   if (s === 'wird') wirdScreen();
   if (s === 'home') { dashboard(); reviewCard(); }
   if (s === 'refs') refsScreen();
@@ -2334,7 +2798,7 @@ function syncControls() {
   $('hUnitSel').value = hUnit; $('hGoalPSel').value = hGoalP;
   $('hGoalSel').hidden = hByPage(); $('hGoalPSel').hidden = !hByPage();
   $('rModeSel').value = readMode; $('dwellSel').value = dwell; $('dwellSel').hidden = readMode !== 'timer';
-  document.documentElement.style.setProperty('--qfs', fontSize + 'px');
+  $('zoomSel').value = zoom; applyZoom();
 }
 let syncT = null;
 window.addEventListener('storage', e => {
@@ -2416,8 +2880,10 @@ function settingsScreen() {
   showSec(setSec);
   syncControls();
   $('mStyle').value = mStyle;
+  $('zoomSel').value = zoom;
   $('themeSel').value = theme;
   drawRemList();
+  drawTsModel();
   setHints();
   if (DESK) { $('setVer').textContent = `الإصدار ${DESK.version}`; drawUpd(DESK.getUpdate()); }
   else {
@@ -2441,6 +2907,7 @@ function setHints() {
   for (let i = 0; i < TOTAL; i++) if ((state[i] & 1) && ivl[i]) { n++; by[ivl[i]] = (by[ivl[i]] || 0) + 1; }
   $('ivlInfo').textContent = n ? `مواعيد خاصة: ${Object.entries(by).map(([k, c]) => `${ayat(c)} ${cycleName(RCYC[k])}`).join('، ')}` : '';
 }
+$('zoomSel').onchange = e => { zoom = +e.target.value; save(); applyZoom(); };
 $('mStyle').onchange = e => {
   mStyle = e.target.value;
   try { localStorage.setItem(KEY + '.mstyle', mStyle); } catch (err) {} deskSave();

@@ -124,6 +124,46 @@
     recent = [{ p: 300, t: Date.now() }]; rcSel = -1; showScreen('refs'); await wait(100);
     checks['آخر ما قرأت في المرجعيات'] = document.querySelectorAll('#riList .rvi').length === 1;
 
+    // البحث في المصحف
+    $('qSearch').value = 'الصلاة'; $('qSearch').dispatchEvent(new Event('input')); await wait(400);
+    checks['البحث بالكلمة دون تشكيل'] = !!lastSearch && lastSearch.res.some(x => x.i === start[2] + 2) && lastSearch.res.length > 50 &&
+      !$('searchPop').hidden && $('searchPop').querySelector('.sri mark') !== null;
+    openHit(start[2] + 2); await wait(1500);
+    const fw = [...document.querySelectorAll(bookOn ? '#book .w.found' : '#mtext .found')];
+    checks['البحث يعلّم الكلمة في الصفحة'] = page === 2 || visiblePages().includes(2) ? fw.length >= 1 && fw.every(x => +x.dataset.i === start[2] + 2) : false;
+    $('qSearch').value = ''; $('qSearch').dispatchEvent(new Event('input')); await wait(1200);
+    checks['مسح البحث يزيل التعليم'] = !sHit && !document.querySelector('#book .w.found');
+
+    // حجم المصحف من الإعدادات، وملء الشاشة دون تمرير
+    checks['لا أزرار تكبير فوق المصحف'] = !document.getElementById('fsUp') && !!$('zoomSel');
+    zoom = 100; applyZoom(); await wait(600);
+    checks['المصحف يملأ الشاشة دون تمرير'] = !bookOn || document.scrollingElement.scrollHeight <= innerHeight + 1;
+
+    // التسميع (بأحداث مصطنعة دون تنزيل النموذج)
+    const T = await import('./vendor/tilawa/tilawa.mjs');
+    checks['محرّك التسميع مضمّن'] = typeof T.createTilawa === 'function' && typeof T.prepareMicrophone === 'function';
+    tsRef = await (await fetch('vendor/tilawa/ref-v2.json')).json();
+    openReader(1); await wait(1000);
+    openTasmee([{ s: 1, from: 1, to: 7 }]); await wait(400);
+    checks['لوحة التسميع تفتح بالمقطع'] = tsIsOpen() && $('tsFrom').value === '1' && $('tsTo').value === '7' && $('reader').classList.contains('tf-open');
+    $('tsHide').checked = true;
+    for (let k = 0; k < 7; k++) rev[start[1] + k] = today() - 1;   // لم تُراجَع اليوم
+    tsAll = { done: new Set(), bad: new Set(), errs: [] }; tsSegs = [{ s: 1, from: 1, to: 7 }]; tsSeg = 0;
+    tsBegin(tsSegs[0]); await wait(1200);
+    const hid = () => document.querySelectorAll(`${bookOn ? '#book' : '#mtext'} .w.tp:not(.rv)`).length;
+    checks['التسميع يخفي آيات المقطع'] = hid() === 36 && $('reader').classList.contains('tsm-hide');
+    const pos = (a, w) => tsHandle({ type: 'position', state: 'locked', observed: [{ word: { surah: 1, ayah: a, word: w } }] });
+    pos(2, 4); pos(3, 2);
+    checks['الكلمات تظهر كلما سُمِّعت'] = hid() === 36 - 13;
+    tsHandle({ type: 'checker', id: 'x1', state: 'confirmed', errorClass: 'wrong_word', location: { surah: 1, ayah: 3, word: 2 } });
+    checks['الخطأ يُعلَّم ويُذكر'] = document.querySelectorAll('.w.bad').length >= 1 && $('tsList').textContent.includes('كلمة مختلفة') && $('tsList').textContent.includes(tsRef.ayahs[start[1] + 2].w[1]);
+    pos(7, 9); tsCollect(); clearTimeout(tsReveal.t); tsFinish();
+    checks['نتيجة التسميع'] = tsResult.review.length === 6 && tsResult.again.length === 1 && $('tsState').textContent.includes('خطأ واحد');
+    $('tsSave').click();
+    checks['تسجيل النتيجة: مراجعة السليم وإعادة الخطأ غدًا'] = rev[start[1]] === today() && rev[start[1] + 2] === today() - cyc(start[1] + 2) + 1 && tsLog.length === 1;
+    await closeTasmee(); await wait(500);
+    checks['إغلاق التسميع يعيد الآيات'] = !tsIsOpen() && !ts && hid() === 0 && !$('reader').classList.contains('tsm-hide');
+
     // الحفظ في الملف
     applyAct([start[114]], 1); save(); await wait(900);
     const file = qmDesktop.readData();
